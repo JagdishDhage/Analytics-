@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bgmi-scrim"
+version = "0.1.0"
+description = "BGMI scrim match-analysis worker: HUD event extraction and team preparation reports"
+requires-python = ">=3.10"
+dependencies = ["opencv-python-headless>=4.8", "numpy>=1.24", "pytesseract>=0.3.10"]
+
+[project.scripts]
+bgmi-scrim = "bgmi_scrim.cli:main"
+
+[tool.setuptools]
+packages = ["bgmi_scrim"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
