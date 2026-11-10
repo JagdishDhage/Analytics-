@@ -32,7 +32,7 @@ def test_profile_roundtrip_and_scaling(tmp_path):
     x, y, w, h = r.rois["teams_alive"].box
     bx, by, bw, bh = p.rois["teams_alive"].box
     assert abs(x / bx - 2 / 3) < 0.01 and abs(w / bw - 2 / 3) < 0.05
-    assert r.rois["team_panel"].meta["row_pitch"] == round(
+    assert r.rois["team_panel"].meta["row_pitch"] == pytest.approx(
         p.rois["team_panel"].meta["row_pitch"] * 720 / 1080)
 
 
@@ -334,3 +334,19 @@ def test_wide_component_splitting_leaves_single_digits_alone():
         ys, xs = np.where(255 - b > 0)
         sub = b[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
         assert len(_split_wide_component(sub)) == 1, f"digit {ch} was split"
+
+
+def test_panel_row_geometry_does_not_drift_when_a_profile_is_scaled():
+    """A row pitch rounded to an integer walks the slot boxes off the last
+    teams: 25 rows of a third of a pixel is eight pixels."""
+    from bgmi_scrim.hud import _slot_box, _tag_box
+    p = Profile.load("profiles/synthetic_1080p.json")
+    q = p.for_frame_size(1280, 720)
+    s = 1280 / 1920.0
+    panel = q.rois["team_panel"]
+    for r in (0, 8, 16, 24):
+        # where the HUD actually draws that row at this resolution
+        want_y = int(120 * s) + int(r * 34 * s) + int(4 * s)
+        got = _slot_box(panel, r, 0)
+        assert abs(got[1] - want_y) <= 1, f"row {r}: box {got[1]} vs drawn {want_y}"
+        assert abs(_tag_box(panel, r)[1] - (int(120 * s) + int(r * 34 * s) + int(2 * s))) <= 1

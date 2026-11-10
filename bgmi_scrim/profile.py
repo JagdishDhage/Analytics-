@@ -31,13 +31,20 @@ class Roi:
         )
 
 
+#: geometry kept as floats through scaling. Rounding a row pitch to an integer
+#: drifts by a pixel every few rows, which at 25 rows walks the slot boxes clean
+#: off the last teams; the rounding happens once, at the point of use.
+_SCALE_Y = ("row_h", "row_pitch", "slot_h", "tag_h", "slot_dy", "tag_dy")
+_SCALE_X = ("slot_w", "tag_w", "slot_pitch", "slot_x0", "tag_x")
+
+
 def _scale_meta(meta: Dict[str, Any], sx: float, sy: float) -> Dict[str, Any]:
     out: Dict[str, Any] = {}
     for k, v in meta.items():
-        if k in ("row_h", "row_pitch", "slot_h", "tag_h", "slot_dy", "tag_dy"):
-            out[k] = int(round(float(v) * sy))
-        elif k in ("slot_w", "tag_w", "slot_pitch", "slot_x0", "tag_x"):
-            out[k] = int(round(float(v) * sx))
+        if k in _SCALE_Y:
+            out[k] = float(v) * sy
+        elif k in _SCALE_X:
+            out[k] = float(v) * sx
         elif k == "slot_boxes":
             out[k] = [
                 [int(round(b[0] * sx)), int(round(b[1] * sy)),

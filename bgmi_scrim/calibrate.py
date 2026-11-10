@@ -121,11 +121,11 @@ def preview(video: str, profile_path: str, out_png: str, at: float = 60.0,
     feed = prof.rois.get("kill_feed")
     if feed and feed.meta.get("rows"):
         x, y, w, _ = feed.box
-        pitch = int(feed.meta["row_pitch"])
-        h = int(feed.meta.get("row_h", pitch))
+        pitch = float(feed.meta["row_pitch"])
+        h = int(round(float(feed.meta.get("row_h", pitch))))
         for r in range(int(feed.meta["rows"])):
-            cv2.rectangle(canvas, (x, y + r * pitch), (x + w, y + r * pitch + h),
-                          (255, 0, 255), 1)
+            ry = y + int(round(r * pitch))
+            cv2.rectangle(canvas, (x, ry), (x + w, ry + h), (255, 0, 255), 1)
     Path(out_png).parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(out_png, canvas)
     out: Dict[str, Any] = {"image": out_png, "resolution": [info.width, info.height],

@@ -81,19 +81,21 @@ def classify_colour(bgr: np.ndarray, states: Dict[str, ColourState]) -> Tuple[Op
 def _slot_box(panel: Roi, row: int, slot: int) -> Tuple[int, int, int, int]:
     m = panel.meta
     x, y, _, _ = panel.box
-    pitch = int(m["row_pitch"])
-    sx0 = int(m["slot_x0"])
-    spitch = int(m["slot_pitch"])
-    return (x + sx0 + slot * spitch, y + row * pitch + int(m.get("slot_dy", 0)),
-            int(m["slot_w"]), int(m["slot_h"]))
+    pitch = float(m["row_pitch"])
+    sx0 = float(m["slot_x0"])
+    spitch = float(m["slot_pitch"])
+    return (x + int(round(sx0 + slot * spitch)),
+            y + int(round(row * pitch + float(m.get("slot_dy", 0)))),
+            max(1, int(round(float(m["slot_w"])))), max(1, int(round(float(m["slot_h"])))))
 
 
 def _tag_box(panel: Roi, row: int) -> Tuple[int, int, int, int]:
     m = panel.meta
     x, y, _, _ = panel.box
-    return (x + int(m.get("tag_x", 0)),
-            y + row * int(m["row_pitch"]) + int(m.get("tag_dy", 0)),
-            int(m["tag_w"]), int(m.get("tag_h", m["slot_h"])))
+    return (x + int(round(float(m.get("tag_x", 0)))),
+            y + int(round(row * float(m["row_pitch"]) + float(m.get("tag_dy", 0)))),
+            max(1, int(round(float(m["tag_w"])))),
+            max(1, int(round(float(m.get("tag_h", m["slot_h"]))))))
 
 
 def read_team_panel(frame: np.ndarray, prof: Profile, read_tags: bool = False) -> PanelReading:
@@ -134,8 +136,8 @@ def read_feed_lines(frame: np.ndarray, prof: Profile) -> List[Tuple[str, float]]
     rows = int(roi.meta.get("rows", 0))
     if rows:  # row-by-row reading is steadier than one psm-6 block
         x, y, w, _ = roi.box
-        pitch = int(roi.meta["row_pitch"])
-        h = int(roi.meta.get("row_h", pitch))
+        pitch = float(roi.meta["row_pitch"])
+        h = max(1, int(round(float(roi.meta.get("row_h", pitch)))))
         def one(r: int) -> Tuple[str, float]:
             pre = prepare_roi(frame, (x, y + r * pitch, w, h), _cfg(prof))
             if roi_is_blank(pre):
