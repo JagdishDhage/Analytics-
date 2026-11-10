@@ -63,6 +63,7 @@ class PanelTagResolver:
             used_rows.add(r)
             used_tags.add(tag)
         self.assigned = out
+        self.epoch_votes = {}
         return out
 
     def end_epoch(self) -> None:
@@ -401,7 +402,6 @@ class Analyzer:
             for r, (tag, conf) in pan.tags.items():
                 tags.vote(r, tag, conf)
         tags.resolve()
-        tags.epoch_votes = {}
 
     def _emit(self, ev: Event) -> None:
         self.events.append(ev)

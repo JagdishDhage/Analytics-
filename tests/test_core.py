@@ -235,3 +235,61 @@ def test_report_derives_only_from_the_log(tmp_path):
     assert md.count("knock") >= 1
     # our kills = 1 (the 0.2-confidence one is excluded) -> 4 placement pts + 1 kill pt
     assert "| 1 | 1 | 5 | 5 |" in md
+
+
+# ---------------- sampling schedule ----------------
+def test_burst_window_raises_the_rate_around_a_change():
+    from bgmi_scrim.sampler import VideoInfo, base_schedule, burst_schedule, merge_schedules
+    info = VideoInfo("x", 30.0, 30 * 60, 1920, 1080)      # 60 s at 30 fps
+    base = base_schedule(info, 2.0)
+    assert base[:3] == [0, 15, 30] and len(base) == 120
+    burst = burst_schedule(info, [10.0], burst_fps=5.0, window_s=3.0)
+    assert burst[0] == int(8.5 * 30) and burst[-1] == pytest.approx(11.5 * 30, abs=6)
+    assert all(b - a == 6 for a, b in zip(burst, burst[1:]))   # 5 fps at 30 fps source
+    merged = merge_schedules(base, burst)
+    assert merged == sorted(set(merged))
+    in_window = [i for i in merged if 8.5 * 30 <= i <= 11.5 * 30]
+    assert len(in_window) >= 15
+
+
+# ---------------- panel row identity ----------------
+def test_tag_resolver_assigns_each_team_to_one_row():
+    from bgmi_scrim.analyze import PanelTagResolver
+    r = PanelTagResolver(3, ["TX", "GB", "SOUL"])
+    r.vote(0, "TX", 0.9); r.vote(0, "GB", 0.2)
+    r.vote(1, "GB", 0.8); r.vote(1, "TX", 0.7)
+    r.vote(2, "SOUL", 0.6)
+    assert r.resolve() == {0: "TX", 1: "GB", 2: "SOUL"}
+    assert r.tag(0) == "TX" and r.resolved(2)
+
+
+def test_unresolved_row_is_named_not_guessed():
+    from bgmi_scrim.analyze import PanelTagResolver
+    r = PanelTagResolver(2, ["TX"])
+    r.vote(0, "TX", 0.9)
+    r.resolve()
+    assert r.tag(1) == "ROW2" and not r.resolved(1)
+
+
+def test_row_moves_only_after_two_decisive_epochs():
+    from bgmi_scrim.analyze import PanelTagResolver
+    r = PanelTagResolver(2, ["TX", "GB"])
+    r.vote(0, "TX", 0.9); r.vote(1, "GB", 0.9)
+    r.resolve()
+    r.vote(0, "GB", 0.9); r.end_epoch()
+    assert r.tag(0) == "TX"          # one disagreeing epoch is not enough
+    r.vote(0, "GB", 0.9); r.end_epoch()
+    assert r.tag(0) == "GB" and r.reorders == 1
+
+
+# ---------------- transitions ----------------
+def test_only_real_slot_transitions_become_events():
+    from bgmi_scrim.analyze import Analyzer
+    from bgmi_scrim.hud import ALIVE, DEAD, KNOCKED
+    k = Analyzer._transition_kind
+    assert k(ALIVE, KNOCKED) == "knock"
+    assert k(KNOCKED, DEAD) == "kill"
+    assert k(ALIVE, DEAD) == "kill"
+    assert k(KNOCKED, ALIVE) is None     # a revive is not an event
+    assert k(None, ALIVE) is None        # first sighting of a slot is not an event
+    assert k(UNKNOWN, DEAD) is None

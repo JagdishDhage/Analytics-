@@ -76,7 +76,12 @@ def cmd_synth(args: argparse.Namespace) -> int:
 
 def cmd_report(args: argparse.Namespace) -> int:
     from .report import build_report
+    table = None
+    if args.points_table:
+        table = json.loads(Path(args.points_table).read_text())
     md = build_report(args.events, team=args.team, block_name=args.block,
+                      placement_points=table,
+                      confidence_threshold=args.confidence_threshold,
                       asked_for=args.asked_for or [])
     if args.out:
         Path(args.out).write_text(md + "\n")
@@ -143,6 +148,9 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--team", required=True)
     r.add_argument("--block", default="scrim block")
     r.add_argument("--out", default=None)
+    r.add_argument("--points-table", default=None,
+                   help="JSON file mapping placement -> points (organiser rule)")
+    r.add_argument("--confidence-threshold", type=float, default=0.6)
     r.add_argument("--asked-for", nargs="*", default=None,
                    help="metrics the coach asked for, to be answered or declared unmeasurable")
     r.set_defaults(func=cmd_report)
