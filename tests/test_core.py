@@ -117,18 +117,27 @@ def test_panel_event_takes_killer_from_the_feed():
     assert out[0].killer_team == "GB" and out[0].source == "panel+feed"
 
 
-def test_feed_only_event_is_dropped_when_the_panel_contradicts_it():
-    fz = Fuser(fuse_window_s=6.0, corroborates=lambda *_: False)
+def test_feed_only_event_is_dropped_when_the_panel_tracks_that_slot():
+    fz = Fuser(fuse_window_s=6.0, panel_blind=lambda *_: False)
     fz.add_feed(_feed_ev(10.0))
     assert fz.flush(now=None) == []
     assert len(fz.suppressed_feed) == 1
 
 
-def test_feed_only_event_is_kept_when_the_panel_saw_something_happen():
-    fz = Fuser(fuse_window_s=6.0, corroborates=lambda *_: True)
+def test_feed_only_event_is_kept_when_the_panel_is_blind():
+    fz = Fuser(fuse_window_s=6.0, panel_blind=lambda *_: True)
     fz.add_feed(_feed_ev(10.0))
     out = fz.flush(now=None)
     assert len(out) == 1 and out[0].source == "feed"
+
+
+def test_a_second_read_of_one_feed_entry_cannot_become_a_second_event():
+    """Two sightings of the same entry whose killer OCR flickered."""
+    tr = FeedTracker(_prof(), confirm_sightings=2)
+    assert tr.observe(1.0, [("GB2 KNOCKED TX4", 0.5)]) == []
+    out = tr.observe(1.5, [("GB1 KNOCKED TX4", 0.9)])      # killer slot read differently
+    assert len(out) == 1
+    assert tr.observe(2.0, [("GB2 KNOCKED TX4", 0.5)]) == []
 
 
 # ---------------- preprocessing ----------------

@@ -32,9 +32,9 @@ class PanelEvent:
 class Fuser:
     fuse_window_s: float = 6.0
     panel_is_authority: bool = True
-    # (victim_team, victim_slot, t) -> True if the panel saw that slot change
-    # state near t, or has no confirmed opinion about it at all.
-    corroborates: Callable[[Optional[str], Optional[int], float], bool] = lambda a, b, c: True
+    # (victim_team, victim_slot) -> True when the panel has no confirmed state
+    # for that slot, so it cannot speak for or against a feed-only event.
+    panel_blind: Callable[[Optional[str], Optional[int]], bool] = lambda a, b: True
     _panel: List[PanelEvent] = field(default_factory=list)
     _feed: List[FeedEvent] = field(default_factory=list)
     suppressed_feed: List[FeedEvent] = field(default_factory=list)
@@ -92,9 +92,13 @@ class Fuser:
                  if now is None or (now - f.t) > self.fuse_window_s]
         for fe in stale:
             self._feed.remove(fe)
-            if self.panel_is_authority and not self.corroborates(
-                    fe.victim_team, fe.victim_slot, fe.t):
-                self.suppressed_feed.append(fe)   # panel disagreed: not emitted
+            if self.panel_is_authority and not self.panel_blind(
+                    fe.victim_team, fe.victim_slot):
+                # The panel tracks this slot and produced no matching
+                # transition, so the feed line is a misread, or a second read
+                # of an entry the panel already accounted for. Either way it
+                # must not become an event.
+                self.suppressed_feed.append(fe)
                 continue
             out.append(Event(
                 t=fe.t, type=fe.kind, confidence=fe.confidence * 0.9, state="ok",

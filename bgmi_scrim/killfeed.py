@@ -82,7 +82,10 @@ class FeedTracker:
     _emitted: Dict[tuple, float] = field(default_factory=dict)
 
     def key(self, ev: FeedEvent) -> tuple:
-        return (ev.kind, ev.victim_team, ev.victim_slot, ev.killer_team, ev.killer_slot)
+        # The victim identifies the event. The killer must NOT be part of the
+        # key: one flickering character in the killer tag would otherwise make
+        # a second key, and the same feed entry would be emitted twice.
+        return (ev.kind, ev.victim_team, ev.victim_slot)
 
     def observe(self, t: float, lines: List[Tuple[str, float]]) -> List[FeedEvent]:
         out: List[FeedEvent] = []
@@ -103,6 +106,11 @@ class FeedTracker:
                 cur = ev
             else:
                 cur.sightings += 1
+                if ev.confidence > cur.confidence or (
+                        cur.killer_team is None and ev.killer_team is not None):
+                    # keep the most confident sighting's killer attribution
+                    cur.killer_team, cur.killer_slot = ev.killer_team, ev.killer_slot
+                    cur.raw = ev.raw
                 cur.confidence = max(cur.confidence, ev.confidence)
             if cur.sightings >= self.confirm_sightings:
                 cur.confidence = min(1.0, cur.confidence + 0.05 * (cur.sightings - 1))

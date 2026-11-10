@@ -222,9 +222,8 @@ class Analyzer:
         slot_transitions: Dict[Tuple[str, int], List[float]] = {}
         fuser = Fuser(fuse_window_s=prof.fuse_window_s,
                       panel_is_authority=bool(panel),
-                      corroborates=lambda team, slot, t: self._corroborates(
-                          tags, slot_fields, slot_transitions, rows, slots, team, slot, t,
-                          prof.fuse_window_s))
+                      panel_blind=lambda team, slot: self._panel_blind(
+                          tags, slot_fields, rows, slots, team, slot))
 
         team_counts: Dict[int, int] = {}
         match_index = 0
@@ -417,30 +416,16 @@ class Analyzer:
         return None
 
     @staticmethod
-    def _corroborates(tags: PanelTagResolver, slot_fields: Dict[str, ConfirmedField],
-                      slot_transitions: Dict[Tuple[str, int], List[float]],
-                      rows: int, slots: int, team: Optional[str], slot: Optional[int],
-                      t: float, window: float) -> bool:
-        """Does the panel back up a feed-only event?
+    def _panel_blind(tags: PanelTagResolver, slot_fields: Dict[str, ConfirmedField],
+                     rows: int, slots: int, team: Optional[str],
+                     slot: Optional[int]) -> bool:
+        """True when the panel holds no confirmed state for this victim.
 
-        Yes if the victim's slot changed state anywhere near that time (so
-        something did happen to them, even if the exact transition was too
-        fast for the sampler to confirm), or if the panel has no confirmed
-        state for that slot at all (so it cannot contradict anything).
-        Otherwise the feed line is a misread and must not become an event.
+        Only then may a feed line stand on its own: the panel has nothing to
+        say about that slot, so the feed is the only witness there is.
         """
         if team is None:
             return False
-        if slot is not None:
-            for ts in slot_transitions.get((team, int(slot)), []):
-                if abs(ts - t) <= window:
-                    return True
-        else:
-            for s in range(1, slots + 1):
-                for ts in slot_transitions.get((team, s), []):
-                    if abs(ts - t) <= window:
-                        return True
-        tracked = False
         for r in range(rows):
             if tags.tag(r) != team:
                 continue
@@ -448,8 +433,8 @@ class Analyzer:
             for s in idxs:
                 f = slot_fields.get(_slot_key(r, int(s)))
                 if f is not None and f.current not in (None, UNKNOWN):
-                    tracked = True
-        return not tracked
+                    return False
+        return True
 
 
 def analyze_video(video: str, profile: Profile, out_path: Optional[str] = None,

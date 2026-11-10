@@ -87,9 +87,11 @@ turned into a guess.
    down (a colour read, confirmed over N samples); the feed is the only witness to
    *who* did it (OCR). A feed line is believed only after two sightings and is then
    suppressed for `dedup_window_s`, so one feed entry cannot emit twice. A
-   feed-only event is emitted only where the panel saw that slot change state
-   nearby, or has no confirmed opinion about it at all; otherwise it is dropped and
-   counted in `suppressed_feed`. That rule is what keeps phantom kills out.
+   feed-only event is emitted only where the panel has no confirmed state for that
+   victim at all (panel ROI missing, row never resolved, indicator occluded);
+   where the panel does track the slot and said nothing, the feed line is dropped
+   and counted in `suppressed_feed`. That rule is what keeps phantom and duplicate
+   kills out, at the cost of leaning on the panel for event existence.
 
 ### Calibration
 
