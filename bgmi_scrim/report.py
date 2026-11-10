@@ -164,8 +164,8 @@ def build_report(event_paths: Sequence[str], team: str, block_name: str = "scrim
     L: List[str] = []
     L.append(f"# {team} — {block_name} preparation report")
     L.append("")
-    L.append(f"Matches in block: {len(matches)}. Source logs: "
-             f"{', '.join(sorted({m.source for m in matches})) or 'none'}. "
+    L.append(f"Matches in block: {len(matches)} "
+             f"({'; '.join(f'M{m.number}={m.source}' for m in matches) or 'none'}). "
              f"Events read at confidence >= {confidence_threshold:.2f}; "
              f"{quality['unknown']} unknown-state and {quality['low_confidence']} "
              f"low-confidence records of {quality['total']} were excluded.")

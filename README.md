@@ -147,8 +147,16 @@ strict (no grace) accuracy alongside.
 
 ### Measured accuracy
 
-See [`docs/accuracy.md`](docs/accuracy.md) for the real numbers, the gate verdict,
-and exactly what footage they were measured on.
+Pooled over five measured runs (1,070 labelled knock/kill events, 2,040 labelled
+frames): knock and kill precision **1.0000**, recall **1.0000**, 0 duplicates,
+0 phantoms, 0 misses; teams-alive 0.9995; zone phase and state 1.0000; per-team
+alive count 1.0000; map, placement and winner correct in all five.
+
+**Those numbers are from synthetic spectator-HUD footage, not from real scrim
+VODs** — no real footage was available where this was built. See
+[`docs/accuracy.md`](docs/accuracy.md) for exactly what was measured, what it
+does not cover, the four real defects the harness caught, and how to get the
+same numbers for your own footage.
 
 ## Phase 2 — team preparation report
 
@@ -163,6 +171,9 @@ against the block average), survival, fights (kills/deaths per phase, trade rate
 knock conversion, knocks conceded then lost), opponents (who took our lives, in
 which phase), three ranked practice focuses each with its single strongest piece
 of log evidence and a measurable target, and **not measurable yet**.
+
+An example built from the five measured runs is in
+[`docs/example_report.md`](docs/example_report.md).
 
 Rules the report keeps:
 
