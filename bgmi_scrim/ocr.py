@@ -71,24 +71,73 @@ def _tess(img: np.ndarray, psm: int, whitelist: str) -> Tuple[str, float]:
     return " ".join(chunks), float(np.mean(confs))
 
 
-def segment_digits(binary: np.ndarray, min_h_frac: float = 0.35,
+def _split_wide_component(sub: np.ndarray, max_parts: int = 6) -> List[np.ndarray]:
+    """Split a component that is too wide to be one digit.
+
+    Neighbouring HUD digits touch after thresholding more often than not
+    ("44" becomes one blob), and a component count that cannot see that is
+    worse than no count at all: it makes a one-digit read of a two-digit
+    number look fully corroborated. Wide components are cut at the valleys of
+    the column ink profile, with a width guard so that a hollow digit such as
+    0 or 8 is never cut in half.
+    """
+    h, w = sub.shape[:2]
+    if h <= 0 or w <= 1.15 * h:
+        return [sub]
+    k = min(max_parts, max(2, int(round(w / (0.85 * h)))))
+    ink = (255 - sub > 0).sum(axis=0).astype(np.int32)
+    min_gap = max(3, int(0.40 * h))
+    cuts: List[int] = []
+    for _ in range(k - 1):
+        best, best_v = None, None
+        for x in range(min_gap, w - min_gap):
+            if any(abs(x - c) < min_gap for c in cuts):
+                continue
+            v = int(ink[x])
+            if best_v is None or v < best_v:
+                best, best_v = x, v
+        if best is None:
+            break
+        cuts.append(best)
+    cuts.sort()
+    if not cuts:
+        return [sub]
+    parts, prev = [], 0
+    for c in cuts + [w]:
+        if c - prev >= 2:
+            parts.append(sub[:, prev:c])
+        prev = c
+    return parts or [sub]
+
+
+def segment_digits(binary: np.ndarray, min_h_frac: float = 0.18,
                    max_boxes: int = 6) -> List[np.ndarray]:
-    """Split a numeral ROI into left-to-right digit crops (dark text on white)."""
+    """Split a numeral ROI into left-to-right digit crops (dark text on white).
+
+    Component height is judged against the tallest component, not against the
+    ROI, so a generously drawn calibration box does not make every digit look
+    too short to be a digit.
+    """
     inv = 255 - binary
     n, _, stats, _ = cv2.connectedComponentsWithStats(inv, connectivity=8)
     h = binary.shape[0]
-    boxes = []
+    cands = []
     for i in range(1, n):
         x, y, w, hh, area = stats[i]
         if hh < min_h_frac * h or area < 8:
             continue
         if w > 0.9 * binary.shape[1] and hh > 0.9 * h:
             continue
-        boxes.append((x, y, w, hh))
+        cands.append((x, y, w, hh))
+    if not cands:
+        return []
+    hmax = max(c[3] for c in cands)
+    boxes = [c for c in cands if c[3] >= 0.55 * hmax]
     boxes.sort(key=lambda b: b[0])
-    if len(boxes) > max_boxes:
-        boxes = boxes[:max_boxes]
-    return [binary[y:y + hh, x:x + w] for (x, y, w, hh) in boxes]
+    crops: List[np.ndarray] = []
+    for (x, y, w, hh) in boxes:
+        crops.extend(_split_wide_component(binary[y:y + hh, x:x + w], max_boxes))
+    return crops[:max_boxes]
 
 
 def _as_images(img) -> List[np.ndarray]:
@@ -139,8 +188,10 @@ def _read_numeral_one(binary: np.ndarray, max_digits: int = 3) -> Tuple[Optional
     nseg = len(crops)
     per_digit: List[str] = []
     per_conf: List[float] = []
+    seg_complete = nseg > 0
     for crop in crops:
         if crop.size == 0:
+            seg_complete = False
             continue
         crop = cv2.resize(crop, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
         t, c = _tess(crop, 10, DIGITS)
@@ -148,19 +199,23 @@ def _read_numeral_one(binary: np.ndarray, max_digits: int = 3) -> Tuple[Optional
         if t:
             per_digit.append(t)
             per_conf.append(c)
+        else:
+            # an unreadable glyph must shorten nothing: without this, a digit
+            # psm 10 cannot read would silently turn 100 into 10
+            seg_complete = False
     seg = "".join(per_digit)
     seg_conf = float(np.mean(per_conf)) if per_conf else 0.0
     if max_digits == 1 and not seg:
         t, c = _tess(binary, 10, DIGITS)
         t = re.sub(r"\D", "", t)[:1]
         if t:
-            seg, seg_conf, nseg = t, c, max(nseg, 1)
+            seg, seg_conf, nseg, seg_complete = t, c, max(nseg, 1), True
 
     cands: dict[str, float] = {}
     if whole:
         cands[whole] = whole_conf if (nseg == 0 or len(whole) == nseg) else whole_conf * 0.35
     if seg:
-        full = (len(seg) == nseg)
+        full = seg_complete and len(seg) == nseg
         score = seg_conf if full else seg_conf * 0.35
         cands[seg] = max(cands.get(seg, 0.0), score)
     if not cands:
@@ -171,6 +226,11 @@ def _read_numeral_one(binary: np.ndarray, max_digits: int = 3) -> Tuple[Optional
     conf = 0.35 + 0.65 * score if agree else 0.25 + 0.65 * score
     if nseg and len(text) != nseg:
         conf = min(conf, 0.45)   # digit count disagrees with what is on screen
+    if (whole and seg and whole != seg and len(whole) == len(seg)
+            and seg_complete and len(whole) == nseg):
+        # both readers produced a full-length number and they disagree:
+        # that is not knowledge, so it must fall below any sane threshold
+        conf = min(conf, 0.45)
     return int(text), min(1.0, conf)
 
 

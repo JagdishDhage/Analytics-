@@ -302,3 +302,35 @@ def test_only_real_slot_transitions_become_events():
     assert k(KNOCKED, ALIVE) is None     # a revive is not an event
     assert k(None, ALIVE) is None        # first sighting of a slot is not an event
     assert k(UNKNOWN, DEAD) is None
+
+
+# ---------------- numeral reading ----------------
+@pytest.mark.parametrize("value", ["44", "100", "23", "7", "11", "88", "25", "99"])
+def test_counter_digits_are_read_even_when_glyphs_touch(value):
+    """'44' thresholds into one blob; a component count that cannot see that
+    used to make a one-digit read look corroborated."""
+    import cv2
+    from bgmi_scrim.ocr import read_numeral
+    from bgmi_scrim.preprocess import prepare_roi
+    img = np.full((80, 240, 3), 20, np.uint8)
+    cv2.putText(img, value, (10, 56), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (235, 235, 235),
+                2, cv2.LINE_AA)
+    pre = prepare_roi(img, (5, 10, 110, 60), {"upscale": 2, "min_height": 72})
+    got, conf = read_numeral([pre["binary_otsu"], pre["binary"]], max_digits=3)
+    assert got == int(value), f"read {got} (conf {conf:.2f}) for {value}"
+    assert conf >= 0.6
+
+
+def test_wide_component_splitting_leaves_single_digits_alone():
+    import cv2
+    from bgmi_scrim.ocr import _split_wide_component
+    for ch in "0689":
+        img = np.full((80, 60, 3), 20, np.uint8)
+        cv2.putText(img, ch, (6, 60), cv2.FONT_HERSHEY_SIMPLEX, 1.6, (235, 235, 235),
+                    3, cv2.LINE_AA)
+        g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        _, b = cv2.threshold(g, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        b = 255 - b
+        ys, xs = np.where(255 - b > 0)
+        sub = b[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+        assert len(_split_wide_component(sub)) == 1, f"digit {ch} was split"
