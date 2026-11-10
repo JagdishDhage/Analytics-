@@ -231,7 +231,7 @@ class Analyzer:
         map_done = False
         our_dead_at: Optional[float] = None
         placement_emitted = False
-        winner_emitted = False
+        winner_reads: List[Tuple[float, Optional[int], str, float]] = []
         last_tag_read = -1e9
         tag_refresh = float(prof.sampling.get("tag_refresh_s", 20.0))
         match_start_t = 0.0
@@ -266,11 +266,12 @@ class Analyzer:
                                      frame=fi, source="counters", match_index=match_index,
                                      value=ta))
                 elif isinstance(prev_teams, int) and ta > prev_teams:
-                    self._emit(Event(t=t, type=MATCH_END, confidence=counters[TEAMS_ALIVE].current_conf,
-                                     frame=fi, source="counter_reset", match_index=match_index))
+                    self._finalize_winner(winner_reads, tags, slot_fields, rows, slots,
+                                          match_index, t, prof)
                     match_index += 1
                     match_start_t = t
-                    our_dead_at, placement_emitted, winner_emitted, map_done = None, False, False, False
+                    winner_reads = []
+                    our_dead_at, placement_emitted, map_done = None, False, False
                     team_counts.clear()
                     self._emit(Event(t=t, type=MATCH_START, confidence=counters[TEAMS_ALIVE].current_conf,
                                      frame=fi, source="counter_reset", match_index=match_index,
@@ -356,28 +357,21 @@ class Analyzer:
                                      frame=fi, source="teams_alive_at_wipe", value=ta,
                                      team=self.our_team, match_index=match_index))
                     placement_emitted = True
-            if not winner_emitted and isinstance(ta, int) and ta <= 1:
+            # The winner is decided once, at the end of the match: the banner
+            # is the evidence, and the panel's last-standing row is the
+            # fallback. Committing the moment teams_alive hits 1 reads a panel
+            # that has not finished confirming the last deaths.
+            if isinstance(ta, int) and ta <= 2:
                 wt, wconf = hud.read_winner_tag(frame, prof)
-                if wt is None and pan:
-                    live = [r for r in range(rows)
-                            if any(slot_fields[_slot_key(r, s)].current not in (hud.DEAD, None, UNKNOWN)
-                                   for s in range(slots))]
-                    if len(live) == 1:
-                        wt, wconf = tags.tag(live[0]), min(0.85, tags.confidence(live[0]))
                 if wt is not None and wconf >= prof.confidence_threshold:
-                    self._emit(Event(t=t, type=WINNER, confidence=wconf, frame=fi,
-                                     source="panel" if "ROW" not in wt else "panel_row",
-                                     value=wt, match_index=match_index))
-                    self._emit(Event(t=t, type=MATCH_END, confidence=wconf, frame=fi,
-                                     source="winner", match_index=match_index))
-                    winner_emitted = True
+                    winner_reads.append((t, fi, wt, wconf))
 
         for ev in fuser.flush(now=None):
             ev.match_index = match_index
             self._emit(ev)
-        if match_open and not winner_emitted:
-            self._emit(Event(t=info.duration, type=MATCH_END, confidence=0.5,
-                             state="unknown", source="end_of_video", match_index=match_index))
+        if match_open:
+            self._finalize_winner(winner_reads, tags, slot_fields, rows, slots,
+                                  match_index, info.duration, prof)
 
         self.stats.suppressed_feed = len(fuser.suppressed_feed)
         self.stats.panel_reorders = tags.reorders
@@ -389,6 +383,38 @@ class Analyzer:
         return self.events, self.stats
 
     # ---------------- helpers ----------------
+    def _finalize_winner(self, winner_reads: List[Tuple[float, Optional[int], str, float]],
+                         tags: PanelTagResolver, slot_fields: Dict[str, ConfirmedField],
+                         rows: int, slots: int, match_index: int, end_t: float,
+                         prof: Profile) -> None:
+        """Decide the winner from the banner, else from the last row standing."""
+        if winner_reads:
+            weight: Dict[str, float] = {}
+            for _, _, tag, conf in winner_reads:
+                weight[tag] = weight.get(tag, 0.0) + conf
+            tag = max(weight.items(), key=lambda kv: kv[1])[0]
+            best = max((w for w in winner_reads if w[2] == tag), key=lambda w: w[3])
+            t, fi, _, conf = best
+            self._emit(Event(t=t, type=WINNER, confidence=conf, frame=fi,
+                             source="banner", value=tag, match_index=match_index))
+            self._emit(Event(t=t, type=MATCH_END, confidence=conf, frame=fi,
+                             source="winner", match_index=match_index))
+            return
+        live = [r for r in range(rows)
+                if any(slot_fields[_slot_key(r, s)].current not in (hud.DEAD, None, UNKNOWN)
+                       for s in range(slots))]
+        if len(live) == 1 and tags.resolved(live[0]):
+            conf = min(0.8, max(0.6, tags.confidence(live[0])))
+            self._emit(Event(t=end_t, type=WINNER, confidence=conf, source="panel_last_standing",
+                             value=tags.tag(live[0]), match_index=match_index))
+            self._emit(Event(t=end_t, type=MATCH_END, confidence=conf, source="winner",
+                             match_index=match_index))
+            return
+        self._emit(Event(t=end_t, type=WINNER, confidence=0.0, state="unknown",
+                         source="no_banner_no_single_row", match_index=match_index))
+        self._emit(Event(t=end_t, type=MATCH_END, confidence=0.5, state="unknown",
+                         source="end_of_video", match_index=match_index))
+
     def _resolve_tags(self, path: str, info: sampler.VideoInfo, prof: Profile,
                       tags: PanelTagResolver, n_frames: int) -> None:
         """Pre-pass: read the panel's team tags on a few spread-out frames."""
