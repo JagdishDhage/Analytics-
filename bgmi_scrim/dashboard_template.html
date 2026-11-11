@@ -1,0 +1,829 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scrim block</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100,500;100,700;125,800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --terrain:#1C2119;      /* the map at dusk */
+  --panel:#242B21;
+  --line:#39432F;
+  --bone:#E8E6DC;         /* the safe circle */
+  --ash:#8C9484;
+  --zone:#2FA8E0;         /* the blue wall */
+  --flare:#E85D2A;        /* reserved: only ever our losses */
+  --display:"Archivo","Archivo Expanded","Helvetica Neue",Arial,sans-serif;
+  --body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --gut:clamp(16px,2.2vw,28px);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--terrain);
+  color:var(--bone);
+  font-family:var(--body);
+  font-size:15px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{font-family:var(--display);font-stretch:125%;margin:0;letter-spacing:-.01em}
+a{color:var(--zone)}
+:focus-visible{outline:2px solid var(--zone);outline-offset:3px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.eyebrow{
+  font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--ash);margin:0 0 6px
+}
+.unknown{
+  font-family:var(--mono);font-size:12px;color:var(--ash);
+  border:1px dashed var(--line);border-radius:2px;padding:1px 6px;display:inline-block;
+  letter-spacing:.04em
+}
+
+/* ---------- masthead ---------- */
+.masthead{
+  display:flex;flex-wrap:wrap;align-items:flex-end;gap:var(--gut);
+  padding:clamp(20px,3vw,36px) var(--gut) 18px;
+  border-bottom:1px solid var(--line);
+}
+.mast-team{font-size:clamp(44px,7vw,86px);line-height:.86;font-weight:800}
+.mast-sub{color:var(--ash);margin:8px 0 0;font-size:14px}
+.mast-figures{display:flex;gap:clamp(18px,3vw,44px);margin-left:auto;flex-wrap:wrap}
+.figure-v{font-family:var(--mono);font-size:clamp(22px,2.6vw,32px);line-height:1;font-weight:500}
+.figure-l{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ash);margin-top:7px}
+
+/* ---------- deck ---------- */
+.deck{
+  display:grid;gap:1px;background:var(--line);
+  grid-template-columns:minmax(160px,200px) minmax(0,1fr) minmax(210px,250px);
+  border-bottom:1px solid var(--line);
+}
+.rail,.stage,.readout{background:var(--terrain);min-width:0}
+.rail{padding:18px 14px}
+.stage{padding:18px var(--gut) 22px;min-width:0}
+.readout{padding:18px 16px}
+
+/* match rail */
+.rail-list{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
+.rail-btn{
+  width:100%;display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:baseline;
+  background:none;border:0;border-left:2px solid transparent;color:var(--ash);
+  font-family:var(--mono);font-size:13px;padding:9px 10px;cursor:pointer;text-align:left;
+}
+.rail-btn:hover{color:var(--bone);background:var(--panel)}
+.rail-btn[aria-current="true"]{color:var(--bone);border-left-color:var(--zone);background:var(--panel)}
+.rail-pts{font-size:15px;font-weight:500}
+.rail-place{font-size:11px;letter-spacing:.08em}
+.rail-foot{margin-top:18px;padding-top:14px;border-top:1px solid var(--line);
+  font-family:var(--mono);font-size:11px;color:var(--ash);line-height:1.7}
+
+/* stage */
+.stage-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+.stage-title{font-size:clamp(20px,2.4vw,28px);font-weight:700}
+.stage-meta{font-family:var(--mono);font-size:12px;color:var(--ash);letter-spacing:.06em}
+.stage-map{display:flex;gap:18px;align-items:flex-start;justify-content:center;flex-wrap:wrap}
+.lobby{width:176px;flex:none}
+.lobby-row{
+  display:grid;grid-template-columns:1fr auto;gap:8px;align-items:baseline;
+  font-family:var(--mono);font-size:12px;color:var(--ash);
+  padding:6px 0;border-bottom:1px solid var(--line)
+}
+.lobby-row[data-ours="1"]{color:var(--bone);border-bottom-color:var(--zone)}
+.lobby-d{font-size:11px}
+.lobby-more{font-family:var(--mono);font-size:11px;color:var(--ash);padding-top:8px}
+.mapwrap{
+  position:relative;background:var(--panel);border:1px solid var(--line);
+  width:min(100%,56vh,600px);aspect-ratio:1/1;height:auto;flex:none;
+}
+.mapwrap svg{display:block;width:100%;height:100%}
+.map-empty{
+  display:flex;align-items:center;justify-content:center;height:100%;text-align:center;
+  padding:30px;color:var(--ash);font-family:var(--mono);font-size:13px;line-height:1.8
+}
+.grid-line{stroke:var(--line);stroke-width:6;opacity:.7}
+.grid-label{fill:var(--ash);font-family:var(--mono);font-size:120px;opacity:.35}
+.trail{fill:none;stroke:var(--ash);stroke-width:14;opacity:.3;stroke-linejoin:round;stroke-linecap:round}
+.trail-ours{stroke:var(--zone);stroke-width:26;opacity:.85}
+.dot{fill:var(--ash)}
+.dot-ours{fill:var(--zone);stroke:var(--bone);stroke-width:14}
+.dot-label{fill:var(--bone);font-family:var(--mono);font-size:110px}
+.ring-safe{fill:none;stroke:var(--bone);stroke-width:16;opacity:.85}
+.ring-blue{fill:none;stroke:var(--zone);stroke-width:22;opacity:.9}
+.drop{fill:none;stroke:var(--ash);stroke-width:14}
+.drop-ours{stroke:var(--bone);stroke-width:18}
+
+/* transport */
+.transport{display:flex;align-items:center;gap:12px;margin-top:14px;flex-wrap:wrap}
+.tbtn{
+  font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;
+  background:var(--panel);color:var(--bone);border:1px solid var(--line);
+  padding:7px 13px;cursor:pointer
+}
+.tbtn:hover{border-color:var(--zone)}
+.tbtn[aria-pressed="true"]{border-color:var(--zone);color:var(--zone)}
+.scrub{flex:1;min-width:160px;accent-color:var(--zone);height:22px}
+.clock{font-family:var(--mono);font-size:20px;min-width:72px}
+
+/* signature: the phase ribbon. widths are real phase durations. */
+.ribbon{display:flex;gap:2px;margin-top:16px;height:54px}
+.ribbon-seg{
+  position:relative;background:var(--panel);border:0;border-top:2px solid var(--line);
+  cursor:pointer;padding:0;overflow:hidden;min-width:14px;color:inherit
+}
+.ribbon-seg:hover{background:#2C3528}
+.ribbon-seg[data-on="1"]{border-top-color:var(--zone);background:#2C3528}
+.ribbon-n{position:absolute;left:6px;top:6px;font-family:var(--mono);font-size:11px;color:var(--ash)}
+.ribbon-seg[data-on="1"] .ribbon-n{color:var(--bone)}
+.ribbon-arc{position:absolute;left:50%;transform:translateX(-50%);bottom:5px}
+.ribbon-caption{font-family:var(--mono);font-size:11px;color:var(--ash);margin-top:6px;letter-spacing:.05em}
+
+/* timeline */
+.timeline{margin-top:16px;position:relative;background:var(--panel);border:1px solid var(--line)}
+.timeline svg{display:block;width:100%;height:92px}
+.tl-area{fill:var(--line);opacity:.65}
+.tl-axis{stroke:var(--line);stroke-width:1}
+.tl-gain{stroke:var(--bone);stroke-width:2}
+.tl-loss{stroke:var(--flare);stroke-width:2}
+.tl-other{stroke:var(--ash);stroke-width:1;opacity:.35}
+.tl-head{stroke:var(--zone);stroke-width:2}
+.tl-legend{display:flex;gap:16px;font-family:var(--mono);font-size:11px;color:var(--ash);
+  padding:7px 10px;border-top:1px solid var(--line);flex-wrap:wrap}
+.swatch{display:inline-block;width:10px;height:2px;vertical-align:middle;margin-right:6px}
+
+/* readout */
+.read-row{padding:11px 0;border-bottom:1px solid var(--line)}
+.read-row:last-child{border-bottom:0}
+.read-v{font-family:var(--mono);font-size:21px;line-height:1.1}
+.read-l{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ash);margin-top:5px}
+.read-note{font-size:12px;color:var(--ash);line-height:1.6;margin-top:14px}
+
+/* sheets */
+.sheets{padding:clamp(26px,4vw,52px) var(--gut) 60px;display:grid;
+  grid-template-columns:minmax(0,1fr);gap:clamp(26px,4vw,46px)}
+.sheet{max-width:1100px;min-width:0}
+.sheet h2{font-size:clamp(19px,2.2vw,25px);font-weight:700;margin-bottom:4px}
+.sheet-note{color:var(--ash);font-size:13px;margin:0 0 16px;max-width:62ch}
+.tscroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:540px}
+caption{text-align:left;color:var(--ash);font-family:var(--mono);font-size:11px;
+  letter-spacing:.12em;text-transform:uppercase;padding-bottom:8px}
+th{text-align:left;font-family:var(--mono);font-size:10px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ash);font-weight:400;
+  padding:0 12px 8px 0;border-bottom:1px solid var(--line)}
+td{padding:9px 12px 9px 0;border-bottom:1px solid var(--line);vertical-align:top}
+td.num,th.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+tr:hover td{background:var(--panel)}
+.delta-up{color:var(--bone)}
+.delta-down{color:var(--flare)}
+.focus{display:grid;gap:6px;padding:16px 0;border-bottom:1px solid var(--line)}
+.focus-rank{font-family:var(--mono);font-size:11px;color:var(--zone);letter-spacing:.14em}
+.focus-title{font-family:var(--display);font-stretch:125%;font-size:18px;font-weight:700}
+.focus-ev{color:var(--ash);font-size:13px}
+.focus-target{font-family:var(--mono);font-size:12.5px}
+.limits{list-style:none;margin:0;padding:0;display:grid;gap:9px}
+.limits li{padding-left:20px;position:relative;color:var(--ash);font-size:13px;max-width:78ch}
+.limits li::before{content:"—";position:absolute;left:0;color:var(--line)}
+.foot{padding:22px var(--gut) 60px;border-top:1px solid var(--line);
+  font-family:var(--mono);font-size:11px;color:var(--ash);line-height:1.9}
+
+@media (max-width:1040px){
+  .deck{grid-template-columns:minmax(0,1fr)}
+  .lobby{width:100%}
+  .lobby-row{padding:5px 0}
+  .rail-list{flex-direction:row;overflow-x:auto;gap:2px}
+  .rail-btn{min-width:124px;border-left:0;border-bottom:2px solid transparent}
+  .rail-btn[aria-current="true"]{border-left-color:transparent;border-bottom-color:var(--zone)}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header class="masthead">
+  <div>
+    <p class="eyebrow" id="blockLabel">scrim block</p>
+    <h1 class="mast-team" id="teamName">—</h1>
+    <p class="mast-sub" id="blockSub"></p>
+  </div>
+  <div class="mast-figures" id="figures"></div>
+</header>
+
+<main class="deck">
+  <nav class="rail" aria-label="Matches">
+    <p class="eyebrow">Matches</p>
+    <ul class="rail-list" id="railList"></ul>
+    <div class="rail-foot" id="railFoot"></div>
+  </nav>
+
+  <section class="stage" aria-label="Match playback">
+    <div class="stage-head">
+      <h2 class="stage-title" id="stageTitle">Match</h2>
+      <span class="stage-meta" id="stageMeta"></span>
+    </div>
+    <div class="stage-map">
+      <div class="lobby" id="lobby" aria-live="off"><p class="eyebrow">Nearest teams</p></div>
+      <div class="mapwrap" id="mapWrap"></div>
+    </div>
+    <div class="transport">
+      <button class="tbtn" id="playBtn" aria-pressed="false">Play</button>
+      <button class="tbtn" data-speed="4" aria-pressed="true">4×</button>
+      <button class="tbtn" data-speed="12" aria-pressed="false">12×</button>
+      <input class="scrub" id="scrub" type="range" min="0" max="100" value="0" step="0.5"
+             aria-label="Match time">
+      <span class="clock mono" id="clock">00:00</span>
+    </div>
+    <div class="ribbon" id="ribbon" role="group" aria-label="Zone phases"></div>
+    <p class="ribbon-caption" id="ribbonCaption"></p>
+    <div class="timeline">
+      <svg id="timeline" viewBox="0 0 1000 92" preserveAspectRatio="none" role="img"
+           aria-label="Kills and knocks over the match"></svg>
+      <div class="tl-legend">
+        <span><i class="swatch" style="background:var(--bone)"></i>our kill or knock</span>
+        <span><i class="swatch" style="background:var(--flare)"></i>our loss</span>
+        <span><i class="swatch" style="background:var(--ash)"></i>elsewhere in the lobby</span>
+        <span><i class="swatch" style="background:var(--line);height:8px"></i>teams alive</span>
+        <span>trails start where each team landed</span>
+      </div>
+    </div>
+  </section>
+
+  <aside class="readout" aria-label="Readout at the current time" id="readout"></aside>
+</main>
+
+<div class="sheets">
+  <section class="sheet"><h2>Result</h2>
+    <p class="sheet-note" id="pointsNote"></p>
+    <div class="tscroll"><table id="resultTable"></table></div></section>
+  <section class="sheet"><h2>Survival</h2>
+    <p class="sheet-note">Time alive is measured from the first confirmed lobby counter to the
+      kill event against each slot. A slot with no kill event against it was still alive when
+      the log ended.</p>
+    <div class="tscroll"><table id="survivalTable"></table></div></section>
+  <section class="sheet"><h2>Fights</h2>
+    <p class="sheet-note" id="fightsNote"></p>
+    <div class="tscroll"><table id="phaseTable"></table></div></section>
+  <section class="sheet"><h2>Opponents</h2>
+    <p class="sheet-note" id="oppNote"></p>
+    <div class="tscroll"><table id="oppTable"></table></div></section>
+  <section class="sheet"><h2>Practice focuses</h2>
+    <p class="sheet-note">Ranked by the size of the measured gap. Each one cites the single
+      strongest record in the log.</p>
+    <div id="focusList"></div></section>
+  <section class="sheet"><h2>Not measurable yet</h2>
+    <p class="sheet-note">What the logs cannot support. Nothing here is estimated.</p>
+    <ul class="limits" id="limitsList"></ul></section>
+</div>
+
+<footer class="foot" id="foot"></footer>
+
+<script>
+const MODEL = /*%%MODEL%%*/null;
+const $ = (id) => document.getElementById(id);
+const SVGNS = "http://www.w3.org/2000/svg";
+const clock = (s) => {
+  s = Math.max(0, s || 0);
+  return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(Math.floor(s % 60)).padStart(2, "0");
+};
+const el = (tag, cls, text) => {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined) n.textContent = text;
+  return n;
+};
+const svg = (tag, attrs) => {
+  const n = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  return n;
+};
+const unknown = (word) => { const s = el("span", "unknown", word || "unknown"); return s; };
+
+let state = { match: 0, t: 0, playing: false, speed: 4, raf: null, last: 0 };
+
+/* ---------- masthead ---------- */
+function paintMasthead() {
+  $("teamName").textContent = MODEL.team;
+  $("blockLabel").textContent = MODEL.block;
+  const maps = [...new Set(MODEL.matches.map(m => m.map).filter(Boolean))];
+  $("blockSub").textContent = MODEL.matches.length + " matches · " +
+    (maps.length ? maps.join(", ") : "map not in log") + " · read at confidence ≥ " +
+    MODEL.threshold.toFixed(2);
+  const total = MODEL.matches.reduce((a, m) => a + m.total, 0);
+  const kills = MODEL.matches.reduce((a, m) => a + m.kills, 0);
+  const places = MODEL.matches.map(m => m.placement).filter(p => p != null);
+  const figs = [
+    [total, "block points"],
+    [MODEL.blockAverage.toFixed(2), "average per match"],
+    [kills, "kills"],
+    [places.length ? "#" + Math.min(...places) : "—", "best placement"],
+  ];
+  const wrap = $("figures");
+  wrap.textContent = "";
+  for (const [v, l] of figs) {
+    const d = el("div");
+    d.append(el("div", "figure-v", String(v)), el("div", "figure-l", l));
+    wrap.append(d);
+  }
+}
+
+/* ---------- match rail ---------- */
+function paintRail() {
+  const list = $("railList");
+  list.textContent = "";
+  MODEL.matches.forEach((m, i) => {
+    const li = el("li");
+    const b = el("button", "rail-btn");
+    b.type = "button";
+    b.setAttribute("aria-current", i === state.match ? "true" : "false");
+    b.append(el("span", "rail-pts", "M" + m.n));
+    b.append(el("span", "rail-place", m.placement != null ? "#" + m.placement : "no placement"));
+    b.append(el("span", "rail-pts", String(m.total)));
+    b.addEventListener("click", () => selectMatch(i));
+    li.append(b);
+    list.append(li);
+  });
+  const q = MODEL.quality;
+  $("railFoot").textContent =
+    `${q.total} records read\n${q.unknown} unknown\n${q.low_confidence} below threshold`;
+  $("railFoot").style.whiteSpace = "pre-line";
+}
+
+/* ---------- map ---------- */
+function currentMatch() { return MODEL.matches[state.match]; }
+
+function posAt(path, t) {
+  if (!path || !path.length) return null;
+  if (t < path[0][0] - 6 || t > path[path.length - 1][0] + 6) return null;
+  let lo = 0, hi = path.length - 1;
+  while (lo < hi - 1) { const mid = (lo + hi) >> 1; (path[mid][0] <= t ? lo = mid : hi = mid); }
+  const a = path[lo], b = path[hi];
+  if (b[0] === a[0]) return [a[1], a[2]];
+  const f = Math.min(1, Math.max(0, (t - a[0]) / (b[0] - a[0])));
+  return [a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+}
+
+function phaseAt(map3, t) {
+  if (!map3 || !map3.phases.length) return null;
+  let cur = null, prev = null;
+  for (const p of map3.phases) { if (p.t <= t) { prev = cur; cur = p; } }
+  return cur ? { cur, prev } : null;
+}
+
+function buildMap() {
+  const wrap = $("mapWrap");
+  wrap.textContent = "";
+  const m = currentMatch();
+  if (!m.map3) {
+    const d = el("div", "map-empty");
+    d.append(document.createTextNode("No map stream for this match."));
+    d.append(el("br"));
+    d.append(document.createTextNode("Run mapanalyze on the map recording to fill this panel."));
+    wrap.append(d);
+    return null;
+  }
+  const W = m.map3.world;
+  const s = svg("svg", { viewBox: `0 0 ${W} ${W}`, role: "img",
+                         "aria-label": "Player positions on the map" });
+  const cell = W / 8;
+  const g = svg("g", {});
+  for (let i = 1; i < 8; i++) {
+    g.append(svg("line", { class: "grid-line", x1: i * cell, y1: 0, x2: i * cell, y2: W }));
+    g.append(svg("line", { class: "grid-line", x1: 0, y1: i * cell, x2: W, y2: i * cell }));
+  }
+  for (let gx = 0; gx < 8; gx++) for (let gy = 0; gy < 8; gy++) {
+    const t = svg("text", { class: "grid-label", x: gx * cell + 26, y: gy * cell + 140 });
+    t.textContent = "ABCDEFGH"[gx] + (gy + 1);
+    g.append(t);
+  }
+  s.append(g);
+  const layers = {};
+  for (const name of ["drops", "trails", "rings", "dots"]) {
+    layers[name] = svg("g", {});
+    s.append(layers[name]);
+  }
+  for (const d of m.map3.landings) {
+    const ours = d.team === MODEL.team;
+    const r = 70;
+    layers.drops.append(svg("path", {
+      class: "drop" + (ours ? " drop-ours" : ""),
+      d: `M${d.x - r},${d.y} L${d.x},${d.y - r} L${d.x + r},${d.y} L${d.x},${d.y + r} Z`,
+      opacity: d.sure ? 1 : 0.45
+    }));
+    if (ours) {
+      const t = svg("text", { class: "dot-label", x: d.x - 150, y: d.y + 260 });
+      t.setAttribute("fill", "var(--ash)");
+      t.textContent = "drop " + (d.place || "");
+      layers.drops.append(t);
+    }
+  }
+  wrap.append(s);
+  return { svg: s, layers, world: W };
+}
+
+let MAP = null;
+
+function paintMap(t) {
+  const m = currentMatch();
+  if (!MAP || !m.map3) return;
+  const { layers } = MAP;
+  layers.trails.textContent = "";
+  layers.dots.textContent = "";
+  layers.rings.textContent = "";
+  const ph = phaseAt(m.map3, t);
+  if (ph) {
+    const c = ph.cur;
+    layers.rings.append(svg("circle", { class: "ring-safe", cx: c.cx, cy: c.cy, r: c.r }));
+    let b = c;
+    if (ph.prev && c.closed != null && t < c.closed) {
+      const span = Math.max(0.001, c.closed - c.t);
+      const f = Math.min(1, Math.max(0, (t - c.t) / span));
+      b = { cx: ph.prev.cx + (c.cx - ph.prev.cx) * f, cy: ph.prev.cy + (c.cy - ph.prev.cy) * f,
+            r: ph.prev.r + (c.r - ph.prev.r) * f };
+    }
+    layers.rings.append(svg("circle", { class: "ring-blue", cx: b.cx, cy: b.cy, r: b.r }));
+  }
+  const landed = {};
+  for (const d of m.map3.landings) if (d.sure) landed[d.team] = d.t;
+  for (const [team, path] of Object.entries(m.map3.paths)) {
+    const ours = team === MODEL.team;
+    const from = landed[team] != null ? landed[team] : -1;
+    const pts = path.filter(p => p[0] <= t && p[0] >= from);
+    if (pts.length > 1) {
+      layers.trails.append(svg("polyline", {
+        class: "trail" + (ours ? " trail-ours" : ""),
+        points: pts.map(p => p[1] + "," + p[2]).join(" ")
+      }));
+    }
+    const p = posAt(path, t);
+    if (!p) continue;
+    const dot = svg("circle", {
+      class: "dot" + (ours ? " dot-ours" : ""), cx: p[0], cy: p[1], r: ours ? 78 : 52
+    });
+    const tip = svg("title", {});
+    tip.textContent = `${team} · ${gridRef(p[0], p[1], m.map3.world)} · ${clock(t)}`;
+    dot.append(tip);
+    layers.dots.append(dot);
+  }
+}
+
+/* ---------- phase ribbon (widths are real durations) ---------- */
+function paintRibbon() {
+  const m = currentMatch();
+  const wrap = $("ribbon");
+  wrap.textContent = "";
+  const phases = m.map3 && m.map3.phases.length
+    ? m.map3.phases.map(p => ({ n: p.n, t: p.t, r: p.r }))
+    : m.zonePhases.map(p => ({ n: p.n, t: p.t, r: null }));
+  if (!phases.length) {
+    $("ribbonCaption").textContent = "No zone phase reached the log for this match.";
+    return;
+  }
+  const end = m.duration;
+  const maxR = Math.max(...phases.map(p => p.r || 0), 1);
+  phases.forEach((p, i) => {
+    const next = i + 1 < phases.length ? phases[i + 1].t : end;
+    const b = el("button", "ribbon-seg");
+    b.type = "button";
+    b.style.flexGrow = String(Math.max(0.4, next - p.t));
+    b.title = `Phase ${p.n} from ${clock(p.t)}`;
+    b.append(el("span", "ribbon-n", String(p.n)));
+    if (p.r) {
+      const size = 30;
+      const a = svg("svg", { width: size, height: size, viewBox: "0 0 30 30", class: "ribbon-arc" });
+      a.append(svg("circle", { cx: 15, cy: 15, r: Math.max(2, 13 * (p.r / maxR)),
+                               fill: "none", stroke: "currentColor", "stroke-width": 1.5,
+                               opacity: .6 }));
+      b.append(a);
+    }
+    b.addEventListener("click", () => setTime(p.t));
+    wrap.append(b);
+  });
+  $("ribbonCaption").textContent =
+    "Segment width is the real time that phase lasted; the circle glyph is its radius" +
+    (phases[0].r ? ` (${Math.round(phases[0].r)} m down to ${Math.round(phases[phases.length - 1].r)} m).` : ".");
+}
+
+function markRibbon(t) {
+  const m = currentMatch();
+  const phases = m.map3 && m.map3.phases.length ? m.map3.phases : m.zonePhases;
+  const segs = $("ribbon").children;
+  let on = -1;
+  phases.forEach((p, i) => { if (p.t <= t) on = i; });
+  for (let i = 0; i < segs.length; i++) segs[i].dataset.on = i === on ? "1" : "0";
+}
+
+/* ---------- timeline ---------- */
+function paintTimeline() {
+  const m = currentMatch();
+  const s = $("timeline");
+  s.textContent = "";
+  const W = 1000, H = 92, mid = 52, end = Math.max(1, m.duration);
+  const x = (t) => (t / end) * W;
+  if (m.teamsAlive.length) {
+    const maxA = Math.max(...m.teamsAlive.map(p => p[1]), 1);
+    const pts = m.teamsAlive.map(p => `${x(p[0])},${H - 6 - (p[1] / maxA) * (H - 18)}`);
+    s.append(svg("polygon", { class: "tl-area",
+      points: `0,${H} ` + pts.join(" ") + ` ${W},${H}` }));
+  }
+  s.append(svg("line", { class: "tl-axis", x1: 0, y1: mid, x2: W, y2: mid }));
+  for (const e of m.events) {
+    const cls = e.side === "gain" ? "tl-gain" : e.side === "loss" ? "tl-loss" : "tl-other";
+    const len = e.side === "other" ? 7 : (e.kind === "kill" ? 20 : 12);
+    const up = e.side !== "loss";
+    const ln = svg("line", { class: cls, x1: x(e.t), x2: x(e.t),
+      y1: mid, y2: up ? mid - len : mid + len });
+    const title = svg("title", {});
+    title.textContent = `${clock(e.t)} ${e.kind} ${e.victim}` +
+      (e.killer ? ` by ${e.killer}` : " (killer not in log)");
+    ln.append(title);
+    s.append(ln);
+  }
+  const head = svg("line", { class: "tl-head", id: "tlHead", x1: 0, y1: 0, x2: 0, y2: H });
+  s.append(head);
+  s.onclick = (ev) => {
+    const r = s.getBoundingClientRect();
+    setTime(((ev.clientX - r.left) / r.width) * end);
+  };
+}
+
+function markTimeline(t) {
+  const m = currentMatch();
+  const head = document.getElementById("tlHead");
+  if (!head) return;
+  const px = (t / Math.max(1, m.duration)) * 1000;
+  head.setAttribute("x1", px); head.setAttribute("x2", px);
+}
+
+/* ---------- readout ---------- */
+function valueAt(series, t) {
+  let v = null;
+  for (const p of series) { if (p[0] <= t) v = p[1]; else break; }
+  return v;
+}
+
+function paintReadout(t) {
+  const m = currentMatch();
+  const box = $("readout");
+  box.textContent = "";
+  const rows = [];
+  rows.push(["clock", clock(t), null]);
+  const teams = valueAt(m.teamsAlive, t);
+  rows.push(["teams alive", teams == null ? null : String(teams), null]);
+  const players = valueAt(m.playersAlive, t);
+  rows.push(["players alive", players == null ? null : String(players), null]);
+  const ph = m.map3 ? phaseAt(m.map3, t) : null;
+  const hudPhase = (() => { let v = null; for (const p of m.zonePhases) if (p.t <= t) v = p.n; return v; })();
+  rows.push(["zone phase", ph ? String(ph.cur.n) : (hudPhase != null ? String(hudPhase) : null), null]);
+  if (m.map3) {
+    const p = posAt(m.map3.paths[MODEL.team], t);
+    rows.push(["we are at", p ? gridRef(p[0], p[1], m.map3.world) : null,
+               p ? `${Math.round(p[0])} m, ${Math.round(p[1])} m` : "not tracked here"]);
+    let near = 0, teamsNear = [];
+    if (p) {
+      for (const [team, path] of Object.entries(m.map3.paths)) {
+        if (team === MODEL.team) continue;
+        const q = posAt(path, t);
+        if (q && Math.hypot(q[0] - p[0], q[1] - p[1]) <= 200) { near++; teamsNear.push(team); }
+      }
+    }
+    rows.push(["dots within 200 m", p ? String(near) : null,
+               teamsNear.length ? teamsNear.join(", ") : (p ? "nobody identified nearby" : null)]);
+    if (ph) {
+      const edge = p ? Math.round(Math.hypot(p[0] - ph.cur.cx, p[1] - ph.cur.cy) - ph.cur.r) : null;
+      rows.push(["to the circle edge", edge == null ? null : (edge <= 0 ? `${-edge} m inside` : `${edge} m outside`), null]);
+    }
+  }
+  for (const [label, value, note] of rows) {
+    const d = el("div", "read-row");
+    const v = el("div", "read-v");
+    if (value == null) v.append(unknown("not in log")); else v.textContent = value;
+    d.append(v, el("div", "read-l", label));
+    if (note) d.append(el("div", "read-note", note));
+    box.append(d);
+  }
+  if (!m.map3) {
+    box.append(el("p", "read-note",
+      "Positions, rotations and proximity need a map stream. This match has HUD events only."));
+  }
+}
+
+function paintLobby(t) {
+  const m = currentMatch();
+  const box = $("lobby");
+  box.textContent = "";
+  box.append(el("p", "eyebrow", "Nearest teams"));
+  if (!m.map3) {
+    box.append(el("p", "lobby-more", "No map stream for this match."));
+    return;
+  }
+  const us = posAt(m.map3.paths[MODEL.team], t);
+  const rows = [];
+  for (const [team, path] of Object.entries(m.map3.paths)) {
+    const p = posAt(path, t);
+    if (!p) continue;
+    rows.push({ team, ref: gridRef(p[0], p[1], m.map3.world),
+                d: us ? Math.hypot(p[0] - us[0], p[1] - us[1]) : null });
+  }
+  rows.sort((a, b) => (a.team === MODEL.team ? -1 : b.team === MODEL.team ? 1
+                       : (a.d ?? 1e9) - (b.d ?? 1e9)));
+  const shown = rows.slice(0, 8);
+  for (const r of shown) {
+    const row = el("div", "lobby-row");
+    row.dataset.ours = r.team === MODEL.team ? "1" : "0";
+    row.append(el("span", null, r.team + "  " + r.ref));
+    row.append(el("span", "lobby-d",
+      r.team === MODEL.team ? "us" : (r.d == null ? "—" : Math.round(r.d) + " m")));
+    box.append(row);
+  }
+  if (!rows.length) box.append(el("p", "lobby-more", "No team identified at this moment."));
+  else if (rows.length > shown.length)
+    box.append(el("p", "lobby-more", (rows.length - shown.length) + " more tracked"));
+}
+
+function gridRef(x, y, world) {
+  const step = world / 8;
+  const gx = Math.min(7, Math.max(0, Math.floor(x / step)));
+  const gy = Math.min(7, Math.max(0, Math.floor(y / step)));
+  return "ABCDEFGH"[gx] + (gy + 1);
+}
+
+/* ---------- tables ---------- */
+function table(node, head, rows, caption) {
+  node.textContent = "";
+  if (caption) { const c = el("caption", null, caption); node.append(c); }
+  const thead = el("thead"), tr = el("tr");
+  head.forEach(h => { const th = el("th", h.num ? "num" : null, h.label); tr.append(th); });
+  thead.append(tr); node.append(thead);
+  const tb = el("tbody");
+  rows.forEach(r => {
+    const row = el("tr");
+    r.forEach((cell, i) => {
+      const td = el("td", head[i].num ? "num" : null);
+      if (cell == null) td.append(unknown("not in log"));
+      else if (cell instanceof Node) td.append(cell);
+      else td.textContent = String(cell);
+      row.append(td);
+    });
+    tb.append(row);
+  });
+  node.append(tb);
+}
+
+function paintSheets() {
+  const pt = Object.entries(MODEL.pointsTable).map(([k, v]) => `#${k}=${v}`).join("  ");
+  $("pointsNote").textContent =
+    `Placement points are an organiser rule, supplied as data, not read from footage: ${pt}; ` +
+    `${MODEL.killPoints} point per kill. Ranks outside the table score 0.`;
+  table($("resultTable"),
+    [{ label: "match" }, { label: "map" }, { label: "placement" }, { label: "place pts", num: 1 },
+     { label: "kills", num: 1 }, { label: "kill pts", num: 1 }, { label: "total", num: 1 },
+     { label: "cumulative", num: 1 }, { label: "vs block avg", num: 1 }],
+    MODEL.matches.map(m => {
+      const d = m.total - MODEL.blockAverage;
+      const sp = el("span", d >= 0 ? "delta-up" : "delta-down",
+                    (d >= 0 ? "+" : "") + d.toFixed(2));
+      return [`M${m.n}`, m.map, m.placement != null ? "#" + m.placement : null,
+              m.placement != null ? m.placementPts : null, m.kills, m.killPts, m.total,
+              m.cumulative, sp];
+    }));
+
+  table($("survivalTable"),
+    [{ label: "match" }, { label: "avg time alive", num: 1 }, { label: "first death", num: 1 },
+     { label: "last death", num: 1 }, { label: "full wipe" }, { label: "top 5" }],
+    MODEL.survival.map(s => [`M${s.m}`, (s.avgAlive / 60).toFixed(2) + " min",
+      s.firstDeath == null ? null : clock(s.firstDeath),
+      s.lastDeath == null ? null : clock(s.lastDeath),
+      s.fullWipe ? "yes" : "no", s.top5 == null ? null : (s.top5 ? "yes" : "no")]));
+
+  const f = MODEL.fights;
+  $("fightsNote").textContent =
+    `Trade rate ${f.trades}/${f.tradeChances}` +
+    (f.tradeChances ? ` = ${(f.trades / f.tradeChances).toFixed(2)}` : "") +
+    ` (a team-mate answered the same opponent within 15 s). ` +
+    `Knocks converted ${f.conversions}/${f.conversionDen}` +
+    (f.conversionDen ? ` = ${(f.conversions / f.conversionDen).toFixed(2)}` : "") +
+    `. Knocks conceded then lost ${f.knocksLost}/${f.knocksLostDen}` +
+    (f.knocksLostDen ? ` = ${(f.knocksLost / f.knocksLostDen).toFixed(2)}` : "") + ".";
+  table($("phaseTable"),
+    [{ label: "match" }, { label: "phase" }, { label: "our kills", num: 1 }, { label: "our deaths", num: 1 }],
+    MODEL.phaseRows.map(r => [`M${r.m}`, r.phase == null ? null : r.phase, r.kills, r.deaths]));
+
+  $("oppNote").textContent =
+    `${MODEL.unattributedDeaths} of our deaths carry no killer in the log and are left out of ` +
+    `this table rather than assigned.`;
+  table($("oppTable"),
+    [{ label: "opponent" }, { label: "our lives taken", num: 1 }, { label: "phases" }, { label: "when" }],
+    MODEL.opponents.map(o => [o.team, o.lives,
+      o.rows.map(r => r.phase == null ? "?" : r.phase).join(", "),
+      o.rows.map(r => `M${r.m} ${clock(r.t)}`).join("  ")]));
+
+  const fl = $("focusList");
+  fl.textContent = "";
+  MODEL.focuses.forEach((x, i) => {
+    const d = el("div", "focus");
+    d.append(el("p", "focus-rank", "Focus " + (i + 1)));
+    d.append(el("p", "focus-title", x.title));
+    d.append(el("p", "focus-ev", x.evidence));
+    d.append(el("p", "focus-target", "Target next block: " + x.target));
+    fl.append(d);
+  });
+  if (!MODEL.focuses.length) {
+    fl.append(el("p", "sheet-note", "Too few attributed events in this block to rank focuses."));
+  }
+
+  const lim = $("limitsList");
+  lim.textContent = "";
+  const hasMap = MODEL.matches.some(m => m.map3);
+  const items = MODEL.notMeasurable.concat(hasMap ? MODEL.mapNotMeasurable : []);
+  items.forEach(t => lim.append(el("li", null, t)));
+
+  $("foot").textContent =
+    `Generated ${MODEL.generated} by bgmi-scrim from ` +
+    `${MODEL.matches.map(m => m.source).join(", ")}. ` +
+    `Every figure on this page comes from a log record; nothing is estimated.`;
+}
+
+/* ---------- transport ---------- */
+function setTime(t) {
+  const m = currentMatch();
+  state.t = Math.max(0, Math.min(m.duration, t));
+  $("scrub").value = String(state.t);
+  $("clock").textContent = clock(state.t);
+  paintMap(state.t);
+  markRibbon(state.t);
+  markTimeline(state.t);
+  paintReadout(state.t);
+  paintLobby(state.t);
+}
+
+function selectMatch(i) {
+  state.match = i;
+  const m = currentMatch();
+  paintRail();
+  $("stageTitle").textContent = `Match ${m.n}`;
+  $("stageMeta").textContent =
+    `${m.map || "map not in log"} · ${m.placement != null ? "#" + m.placement : "placement not in log"}` +
+    ` · ${m.kills} kills · ${clock(m.duration)} of footage` +
+    (m.map3 ? ` · ${Object.keys(m.map3.paths).length} teams tracked` : " · no map stream");
+  $("scrub").max = String(Math.max(1, m.duration));
+  MAP = buildMap();
+  paintRibbon();
+  paintTimeline();
+  setTime(0);
+}
+
+function tick(ts) {
+  if (!state.playing) return;
+  const dt = (ts - state.last) / 1000;
+  state.last = ts;
+  const m = currentMatch();
+  let nt = state.t + dt * state.speed;
+  if (nt >= m.duration) { nt = m.duration; stop(); }
+  setTime(nt);
+  if (state.playing) state.raf = requestAnimationFrame(tick);
+}
+function play() {
+  const m = currentMatch();
+  if (state.t >= m.duration) state.t = 0;
+  state.playing = true;
+  $("playBtn").textContent = "Pause";
+  $("playBtn").setAttribute("aria-pressed", "true");
+  state.last = performance.now();
+  state.raf = requestAnimationFrame(tick);
+}
+function stop() {
+  state.playing = false;
+  $("playBtn").textContent = "Play";
+  $("playBtn").setAttribute("aria-pressed", "false");
+  if (state.raf) cancelAnimationFrame(state.raf);
+}
+
+function wire() {
+  $("playBtn").addEventListener("click", () => state.playing ? stop() : play());
+  document.querySelectorAll("[data-speed]").forEach(b => {
+    b.addEventListener("click", () => {
+      state.speed = Number(b.dataset.speed);
+      document.querySelectorAll("[data-speed]").forEach(o =>
+        o.setAttribute("aria-pressed", o === b ? "true" : "false"));
+    });
+  });
+  $("scrub").addEventListener("input", (e) => { stop(); setTime(Number(e.target.value)); });
+  document.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "INPUT") return;
+    if (e.key === " ") { e.preventDefault(); state.playing ? stop() : play(); }
+    if (e.key === "ArrowRight") setTime(state.t + 5);
+    if (e.key === "ArrowLeft") setTime(state.t - 5);
+  });
+}
+
+document.title = `${MODEL.team} — ${MODEL.block}`;
+paintMasthead();
+paintSheets();
+wire();
+selectMatch(0);
+</script>
+</body>
+</html>

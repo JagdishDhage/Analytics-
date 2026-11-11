@@ -15,5 +15,8 @@ bgmi-scrim = "bgmi_scrim.cli:main"
 [tool.setuptools]
 packages = ["bgmi_scrim"]
 
+[tool.setuptools.package-data]
+bgmi_scrim = ["*.html"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

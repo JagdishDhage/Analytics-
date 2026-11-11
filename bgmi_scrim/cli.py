@@ -11,6 +11,8 @@ mapcalibrate <map video> [--template base.json | --preview mp.json | --pois maps
 maptruth   --labels l.jsonl --tracks t.jsonl --profile mp.json
 mapsynth   --out clip.mp4 --labels l.jsonl                   (test footage)
 mapreport  --tracks t1.jsonl ... --map-events me1.jsonl ... --team TX   (phase 3)
+
+dashboard  --events e1.jsonl ... [--tracks t1.jsonl ...] --team TX --out dash.html
 """
 from __future__ import annotations
 
@@ -173,6 +175,19 @@ def cmd_mapreport(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_dashboard(args: argparse.Namespace) -> int:
+    from .dashboard import build_model, write_dashboard
+    table = json.loads(Path(args.points_table).read_text()) if args.points_table else None
+    model = build_model(args.events, team=args.team, tracks_paths=args.tracks,
+                        map_events_paths=args.map_events, block_name=args.block,
+                        placement_points=table,
+                        confidence_threshold=args.confidence_threshold)
+    out = write_dashboard(args.out, model)
+    size = Path(out).stat().st_size
+    print(f"wrote {out} ({size/1024:.0f} KB, {len(model['matches'])} matches)")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="bgmi-scrim", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -276,6 +291,20 @@ def build_parser() -> argparse.ArgumentParser:
     mc.add_argument("--map", default=None, help="map name (sets the world size)")
     mc.add_argument("--at", type=float, default=90.0)
     mc.set_defaults(func=cmd_mapcalibrate)
+
+    db = sub.add_parser("dashboard", help="one self-contained HTML dashboard from the logs")
+    db.add_argument("--events", nargs="+", required=True,
+                    help="phase-1 events.jsonl, one per match, in match order")
+    db.add_argument("--tracks", nargs="*", default=None,
+                    help="phase-3 tracks.jsonl per match, same order")
+    db.add_argument("--map-events", nargs="*", default=None,
+                    help="phase-3 map events per match, same order")
+    db.add_argument("--team", required=True)
+    db.add_argument("--block", default="scrim block")
+    db.add_argument("--points-table", default=None)
+    db.add_argument("--confidence-threshold", type=float, default=0.6)
+    db.add_argument("--out", default="dashboard.html")
+    db.set_defaults(func=cmd_dashboard)
 
     mr = sub.add_parser("mapreport", help="phase 3: map report (drops, rotations, zones)")
     mr.add_argument("--tracks", nargs="+", required=True)

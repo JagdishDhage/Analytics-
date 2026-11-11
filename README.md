@@ -11,6 +11,7 @@ phase 1   HUD video   --->  events.jsonl                  (analyze)
 phase 2   events.jsonl ---> report.md                     (report)
 phase 3   map video   --->  tracks.jsonl + map_events.jsonl (mapanalyze)
                        ---> map_report.md                 (mapreport)
+all       the logs    ---> dashboard.html                 (dashboard)
 ```
 
 ## Install
@@ -221,6 +222,40 @@ repeats, and a phase is declared only after the new circle is confirmed.
 
 Phase 3 measured accuracy: [`docs/map_accuracy.md`](docs/map_accuracy.md).
 
+## The dashboard
+
+```bash
+python -m bgmi_scrim dashboard \
+    --events m1.events.jsonl m2.events.jsonl m3.events.jsonl \
+    --tracks m1.tracks.jsonl m2.tracks.jsonl \
+    --map-events m1.mapevents.jsonl m2.mapevents.jsonl \
+    --team TX --block "Tuesday block A" --out dashboard.html
+```
+
+One HTML file, around 230 KB for a five-match block. No server, no database and no
+build step, because the rest of this toolchain has none: it opens from a USB stick
+in the practice room, offline. `--tracks` and `--map-events` are optional and are
+matched to `--events` by position; a match with no map stream still gets its
+result, timeline and tables, and says so where the map would be.
+
+What is on it:
+
+* **The map, scrubbable.** Every tracked team's trail from where it landed, the
+  safe and blue circles at that moment, drop markers, and a nearest-teams list
+  that re-sorts as you scrub. Space plays, arrow keys step five seconds.
+* **The phase ribbon.** Eight segments whose widths are the real durations of the
+  phases, each carrying a glyph sized to that circle's radius — phases are not
+  equal lengths and a plain progress bar would say they were.
+* **A kill timeline.** Our kills above the axis, our losses below in the one
+  colour reserved for them, the rest of the lobby in grey behind, over the
+  teams-alive curve. Click to seek.
+* **The block tables**: result against the block average, survival, fights per
+  phase, opponents, the three ranked focuses, and what is not measurable.
+
+The page never prints a number the log does not have. Anything marked unknown or
+below the confidence threshold is drawn as a dashed `not in log` chip, and the
+header states the threshold every figure was read at.
+
 ## Phase 2 — team preparation report
 
 ```bash
@@ -291,7 +326,9 @@ bgmi_scrim/
   map_truth.py      positional ground-truth harness
   map_synth.py      synthetic map footage with exact positions
   map_report.py     phase-3 report
-  cli.py            analyze | calibrate | truth | synth | report
+  dashboard.py      builds the dashboard's data model from the logs
+  dashboard_template.html  the page itself (one file, no build step)
+  cli.py            analyze | calibrate | truth | synth | report | dashboard
                     mapanalyze | mapcalibrate | maptruth | mapsynth | mapreport
 profiles/           bgmi_template_1080p/720p, mapstream_template_1080p
                     (all uncalibrated), synthetic_1080p, synthetic_map_1080p
