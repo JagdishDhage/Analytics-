@@ -7,8 +7,10 @@ the frames. Phase 2 turns those event logs into a coach-facing preparation
 report and derives nothing the log does not contain.
 
 ```
-phase 1   video  --->  events.jsonl        (analyze)
-phase 2   events.jsonl ---> report.md      (report)
+phase 1   HUD video   --->  events.jsonl                  (analyze)
+phase 2   events.jsonl ---> report.md                     (report)
+phase 3   map video   --->  tracks.jsonl + map_events.jsonl (mapanalyze)
+                       ---> map_report.md                 (mapreport)
 ```
 
 ## Install
@@ -158,6 +160,67 @@ VODs** — no real footage was available where this was built. See
 does not cover, the four real defects the harness caught, and how to get the
 same numbers for your own footage.
 
+## Phase 3 — map stream (positions)
+
+```bash
+# calibrate the map box once per overlay, then check it
+python -m bgmi_scrim mapcalibrate map.mp4 --template profiles/mapstream_template_1080p.json \
+    --out profiles/myorg_map.json --map ERANGEL
+python -m bgmi_scrim mapcalibrate map.mp4 --preview profiles/myorg_map.json \
+    --preview-png check.png --at 120
+
+# extract positions and behaviour
+python -m bgmi_scrim mapanalyze map.mp4 --profile profiles/myorg_map.json \
+    --tracks m1.tracks.jsonl --map-events m1.mapevents.jsonl --team TX
+
+# the coach-facing report (add --hud-events to place kills on the map)
+python -m bgmi_scrim mapreport --tracks m1.tracks.jsonl --map-events m1.mapevents.jsonl \
+    --team TX --hud-events m1.events.jsonl --out map_report.md
+```
+
+Input is the full-screen observer map, where every player is a coloured dot
+labelled `TEAMxPLAYER`. Output is `tracks.jsonl` (a position per dot per sample,
+in metres) and `map_events.jsonl` (landings, loot stretches, rotations, zone
+phases and entries, squad spread), for **every team the stream names**, not just
+yours.
+
+### What the medium can and cannot give you
+
+At a full-map view the scale is about **8 m per pixel**, and a player dot is a
+few pixels across, so **two team-mates standing together are one dot**. That is
+not a bug to fix, it is the resolution of the picture. Everything is therefore
+reported at two levels:
+
+* **team** — the median position of that team's dots, which is what rotations,
+  zone timing and drops are derived from. This is reliable.
+* **player** — only where the label beside a dot was read cleanly. A player's
+  name is never carried over to a dot whose colour says it belongs to someone
+  else, and never invented when four names are piled on top of each other.
+
+`mapcalibrate --preview` prints `metres_per_pixel` and `two_dots_merge_below_m`
+for your own footage so you know which of the two you are working with.
+
+### How identity survives a crowded map
+
+1. **Labels** are matched whole against the roster, because `TXxALFA`
+   uppercases to `TXXALFA`, where no regex can tell the separator from the tag.
+2. **Team tags** are read even out of a crowded blob (`TXXALFATXXBRAVO`): the
+   tag followed by an `X` appears several times over, which is enough for the
+   team even when no player can be named.
+3. **Colour** is a second witness, read from different pixels than the text: a
+   colour book learns each team's hue, vetoes names that disagree, and refuses
+   to name a team from colour alone when 25 teams share the hue circle.
+4. **Identity is settled once, at the end of the run**, and applied to a
+   track's whole history — a squad stacked on its drop is named from the label
+   that only becomes legible two minutes later.
+
+Zone circles are fitted with RANSAC (map text is the same white as the safe
+circle, and one blob of it drags a least-squares fit off the map), then
+stabilised: a fit that disagrees with the recent ones is held back until it
+repeats, and a phase is declared only after the new circle is confirmed.
+
+Phase 3 measured accuracy: [`docs/map_accuracy.md`](docs/map_accuracy.md).
+
 ## Phase 2 — team preparation report
 
 ```bash
@@ -217,7 +280,22 @@ bgmi_scrim/
   truth.py          ground-truth harness and gate evaluation
   report.py         phase 2
   synth.py          synthetic HUD footage with labels (testing only)
+  map_profile.py    map-stream profile (map box, dot/label geometry, bands)
+  map_world.py      pixels to metres, POI tables, grid references
+  map_dots.py       dot detection, label matching, the team colour book
+  map_track.py      tracking and identity votes
+  map_zones.py      RANSAC circle fitting and the zone stabiliser
+  map_movement.py   landings, loot, rotations, zone relationship
+  map_analyze.py    the phase-3 pipeline
+  map_calibrate.py  map calibrator, preview and POI picker
+  map_truth.py      positional ground-truth harness
+  map_synth.py      synthetic map footage with exact positions
+  map_report.py     phase-3 report
   cli.py            analyze | calibrate | truth | synth | report
-profiles/           bgmi_template_1080p/720p (uncalibrated), synthetic_1080p
-docs/accuracy.md    measured numbers and the gate verdict
+                    mapanalyze | mapcalibrate | maptruth | mapsynth | mapreport
+profiles/           bgmi_template_1080p/720p, mapstream_template_1080p
+                    (all uncalibrated), synthetic_1080p, synthetic_map_1080p
+maps/               POI tables (calibrated per map; grid refs without one)
+docs/accuracy.md    phase-1 measured numbers and the gate verdict
+docs/map_accuracy.md phase-3 measured numbers
 ```

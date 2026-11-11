@@ -159,20 +159,54 @@ def segments(samples: Sequence[Sample], cfg: Dict[str, Any]) -> List[Segment]:
     return out
 
 
-def phases(zone: Sequence[ZoneSample], min_shrink: float = 0.05) -> List[Phase]:
-    """Phase announcements from the safe circle, closes from the blue circle."""
-    safe = [z for z in zone if z.ring == "safe"]
+def _median_filter(zs: Sequence[ZoneSample], k: int = 3) -> List[ZoneSample]:
+    """Median of a sliding window, so one noisy fit cannot declare a phase."""
+    if k <= 1 or len(zs) < k:
+        return list(zs)
+    out: List[ZoneSample] = []
+    half = k // 2
+    for i, z in enumerate(zs):
+        lo, hi = max(0, i - half), min(len(zs), i + half + 1)
+        win = zs[lo:hi]
+        xs = sorted(w.cx for w in win)
+        ys = sorted(w.cy for w in win)
+        rs = sorted(w.r for w in win)
+        m = len(win) // 2
+        out.append(ZoneSample(z.t, z.ring, xs[m], ys[m], rs[m], z.confidence))
+    return out
+
+
+def phases(zone: Sequence[ZoneSample], min_shrink: float = 0.08,
+           confirm: int = 2) -> List[Phase]:
+    """Phase announcements from the safe circle, closes from the blue circle.
+
+    A phase is only declared once the new circle has been seen on ``confirm``
+    consecutive samples: fitting noise otherwise invents phases that never
+    happened.
+    """
+    safe = _median_filter([z for z in zone if z.ring == "safe"])
     blue = [z for z in zone if z.ring == "blue"]
     out: List[Phase] = []
+    pending: List[ZoneSample] = []
     for z in safe:
         if not out:
             out.append(Phase(1, z.t, z.cx, z.cy, z.r))
             continue
         last = out[-1]
-        moved = math.dist((z.cx, z.cy), (last.cx, last.cy)) > 0.15 * max(last.r, 1.0)
+        moved = math.dist((z.cx, z.cy), (last.cx, last.cy)) > 0.25 * max(last.r, 1.0)
         shrank = z.r < last.r * (1.0 - min_shrink)
-        if shrank or moved:
-            out.append(Phase(last.number + 1, z.t, z.cx, z.cy, z.r))
+        if not (shrank or moved):
+            pending = []
+            continue
+        if pending and (math.dist((z.cx, z.cy), (pending[-1].cx, pending[-1].cy))
+                        <= 0.15 * max(z.r, 1.0)):
+            pending.append(z)
+        else:
+            pending = [z]
+        if len(pending) >= confirm:
+            first = pending[0]
+            out.append(Phase(last.number + 1, first.t, z.cx, z.cy, z.r))
+            pending = []
     for ph in out:
         for b in blue:
             if b.t >= ph.announced_t and b.r <= ph.r * 1.02:

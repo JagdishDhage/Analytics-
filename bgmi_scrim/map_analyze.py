@@ -18,7 +18,7 @@ from .map_movement import (DEFAULTS, Phase, Sample, Segment, ZoneSample,
 from .map_profile import MapProfile
 from .map_track import Detection, Track, Tracker
 from .map_world import WorldMap, spread_m
-from .map_zones import read_circles
+from .map_zones import ZoneStabiliser, read_circles
 
 
 @dataclass
@@ -32,6 +32,7 @@ class MapRunStats:
     identified_samples: int = 0
     anonymous_samples: int = 0
     identity_conflicts: int = 0
+    zone_fits_rejected: int = 0
     seconds: float = 0.0
 
     def as_dict(self) -> Dict[str, Any]:
@@ -82,6 +83,7 @@ class MapAnalyzer:
         last_label_t = -1e9
 
         colours = ColourBook(tol_deg=float(prof.dots.get("colour_tol_deg", 12.0)))
+        stabiliser = ZoneStabiliser()
         pending: List[Dict[str, Any]] = []
         track_colour: Dict[int, List[Tuple[int, int, int]]] = {}
         tracker = Tracker(float(prof.tracking.get("max_speed_mps", 140.0)),
@@ -128,11 +130,13 @@ class MapAnalyzer:
                 track_colour.setdefault(tr.id, []).append(tr.colour)
 
             if i % zone_every == 0:
-                for ring, c in read_circles(frame, prof, world).items():
-                    if c is None or c.confidence < prof.confidence_threshold:
+                for ring, raw in read_circles(frame, prof, world).items():
+                    c = stabiliser.accept(ring, raw) if (
+                        raw is not None and raw.confidence >= prof.confidence_threshold) else None
+                    if c is None:
                         self.records.append({"type": "zone", "t": round(t, 3), "ring": ring,
                                              "state": "unknown", "confidence":
-                                             round(c.confidence, 3) if c else 0.0})
+                                             round(raw.confidence, 3) if raw else 0.0})
                         continue
                     self.records.append({"type": "zone", "t": round(t, 3), "ring": ring,
                                          "cx_m": round(c.cx, 1), "cy_m": round(c.cy, 1),
@@ -161,6 +165,7 @@ class MapAnalyzer:
                 self.stats.anonymous_samples += 1
             self.records.append(out)
         self.records.sort(key=lambda r: (float(r.get("t", -1.0)), r.get("track", 0)))
+        self.stats.zone_fits_rejected = stabiliser.rejected
         self.stats.identity_conflicts = tracker.id_switch_guard
         self.stats.seconds = time.time() - t0
         return self.records, self.stats

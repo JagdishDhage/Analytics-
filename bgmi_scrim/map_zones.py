@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import cv2
@@ -117,6 +117,63 @@ def fit_circle_ransac(points: np.ndarray, r_min: float, r_max: float,
         except np.linalg.LinAlgError:
             pass
     return cx, cy, r, best_in
+
+
+@dataclass
+class ZoneStabiliser:
+    """Reject circle fits that cannot be what the zone just did.
+
+    A single RANSAC fit occasionally locks onto the wrong ring, or onto an arc
+    of something else, and one such fit moves a reported zone centre a
+    kilometre. A real zone moves only when a phase is announced, so a fit that
+    disagrees with the recent ones is held back until it repeats -- the same
+    confirm-before-believing rule the HUD counters use.
+    """
+
+    keep: int = 5
+    confirm: int = 2
+    history: Dict[str, List[Circle]] = field(default_factory=dict)
+    pending: Dict[str, List[Circle]] = field(default_factory=dict)
+    rejected: int = 0
+
+    def accept(self, ring: str, c: Optional[Circle]) -> Optional[Circle]:
+        if c is None:
+            return None
+        hist = self.history.setdefault(ring, [])
+        if not hist:
+            hist.append(c)
+            return c
+        med = self._median(hist)
+        move = math.dist((c.cx, c.cy), (med.cx, med.cy))
+        dr = abs(c.r - med.r)
+        tol_c = max(80.0, 0.25 * med.r)
+        tol_r = max(80.0, 0.20 * med.r)
+        if move <= tol_c and dr <= tol_r:
+            self.pending.pop(ring, None)
+            hist.append(c)
+            del hist[:-self.keep]
+            return c
+        pend = self.pending.setdefault(ring, [])
+        if pend and (math.dist((c.cx, c.cy), (pend[-1].cx, pend[-1].cy)) <= tol_c
+                     and abs(c.r - pend[-1].r) <= tol_r):
+            pend.append(c)
+        else:
+            pend[:] = [c]
+        if len(pend) >= self.confirm:
+            # it kept saying the same new thing: the zone really did change
+            self.history[ring] = list(pend[-self.keep:])
+            self.pending.pop(ring, None)
+            return c
+        self.rejected += 1
+        return None
+
+    @staticmethod
+    def _median(cs: List[Circle]) -> Circle:
+        xs = sorted(c.cx for c in cs)
+        ys = sorted(c.cy for c in cs)
+        rs = sorted(c.r for c in cs)
+        m = len(cs) // 2
+        return Circle(xs[m], ys[m], rs[m], 1.0)
 
 
 def read_circles(frame: np.ndarray, prof: MapProfile, world: WorldMap

@@ -173,11 +173,30 @@ def test_jitter_in_one_place_is_not_a_rotation():
 
 
 def test_phases_come_from_the_safe_circle_and_closes_from_the_blue():
-    z = [ZoneSample(0, "safe", 4000, 4000, 3000), ZoneSample(0, "blue", 4000, 4000, 3000),
-         ZoneSample(60, "safe", 3500, 3500, 1500), ZoneSample(95, "blue", 3500, 3500, 1500)]
+    z = [ZoneSample(t, "safe", 4000, 4000, 3000) for t in (0, 20, 40)]
+    z += [ZoneSample(t, "safe", 3500, 3500, 1500) for t in (60, 62, 64)]
+    z += [ZoneSample(0, "blue", 4000, 4000, 3000),
+          ZoneSample(95, "blue", 3500, 3500, 1500)]
     ps = phases(z)
     assert [p.number for p in ps] == [1, 2]
     assert ps[1].announced_t == 60 and ps[1].closed_t == 95
+
+
+def test_one_bad_circle_fit_does_not_invent_a_phase():
+    z = [ZoneSample(t, "safe", 4000, 4000, 3000) for t in range(0, 20, 2)]
+    z.insert(5, ZoneSample(9, "safe", 1200, 7000, 900))      # a single wild fit
+    z.sort(key=lambda s: s.t)
+    assert [p.number for p in phases(z)] == [1]
+
+
+def test_the_zone_stabiliser_holds_a_jump_back_until_it_repeats():
+    from bgmi_scrim.map_zones import Circle, ZoneStabiliser
+    st = ZoneStabiliser(confirm=2)
+    for _ in range(3):
+        assert st.accept("safe", Circle(4000, 4000, 2000, 0.9)) is not None
+    assert st.accept("safe", Circle(1000, 7000, 400, 0.9)) is None    # held back
+    assert st.accept("safe", Circle(1005, 7002, 402, 0.9)) is not None  # repeated: real
+    assert st.rejected == 1
 
 
 def test_zone_entry_reports_the_margin_to_the_close():
