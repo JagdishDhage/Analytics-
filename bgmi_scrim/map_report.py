@@ -157,13 +157,16 @@ def build_map_report(tracks_paths: Sequence[str], events_paths: Sequence[str],
         if land is None:
             L.append(f"| M{m.number} | {m.map_name or '?'} | not in log | - | - | - | - |")
             continue
+        landed_txt = _fmt(float(land["t"]))
+        if land.get("state") == "no_descent_seen":
+            landed_txt += " (no descent seen)"
         first_move = rots[0]["t"] if rots else None
         loot_s = sum(float(e["duration_s"]) for e in loots
                      if float(e["t"]) < (first_move if first_move is not None else 1e9))
         dist_txt = "-"
         if ph1:
             dist_txt = (f"{math.dist((float(land['x_m']), float(land['y_m'])), (float(ph1['cx_m']), float(ph1['cy_m']))):.0f} m")
-        L.append(f"| M{m.number} | {m.map_name or '?'} | {_fmt(float(land['t']))} | "
+        L.append(f"| M{m.number} | {m.map_name or '?'} | {landed_txt} | "
                  f"{land['place']} | "
                  f"{_fmt(first_move) if first_move is not None else 'no rotation in log'} | "
                  f"{loot_s:.0f} s | {dist_txt} |")
@@ -191,12 +194,16 @@ def build_map_report(tracks_paths: Sequence[str], events_paths: Sequence[str],
                      f"{r.get('mode', '?')} | {r['from']} → {r['to']} | "
                      f"{float(r['distance_m']):.0f} m | {_fmt(float(r['t_end']))} | "
                      f"{('%.0f s' % float(margin)) if margin is not None else '-'} |")
-            if margin is not None and float(margin) < 30:
+            if margin is not None and 0 <= float(margin) < 30:
                 late_rows.append(f"{m.cite(float(r['t_end']), r['to'])} phase {ph_no}, "
                                  f"{float(margin):.0f}s before the circle closed")
+            elif margin is not None and float(margin) < 0:
+                late_rows.append(f"{m.cite(float(r['t_end']), r['to'])} phase {ph_no}, "
+                                 f"arrived {-float(margin):.0f}s AFTER the circle closed")
     L.append("")
     if late_rows:
-        L.append("Arrived with under 30 s to spare: " + "; ".join(late_rows) + ".")
+        L.append("Late arrivals (under 30 s to spare, or after the close): "
+                 + "; ".join(late_rows) + ".")
     else:
         L.append("No phase was entered with under 30 s to spare in these logs.")
     L.append("")

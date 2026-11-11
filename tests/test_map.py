@@ -234,3 +234,26 @@ def test_pipeline_reads_a_rendered_map_frame():
     for d in dots:
         wx, wy = w.to_world(d.px, d.py)
         assert min(math.dist((wx, wy), a) for a in alive) < 60
+
+
+def test_landing_is_the_end_of_the_descent_not_the_wait_in_the_plane():
+    """A dot sitting still in the aircraft is slow; only the descent tells you
+    where a squad actually came down."""
+    from bgmi_scrim.map_movement import landing
+    plane = [Sample(t * 0.5, 100.0, 0.0) for t in range(20)]            # waiting
+    descent = [Sample(10 + t * 0.5, 100.0 + t * 60.0, 0.0) for t in range(20)]  # 120 m/s
+    ground = [Sample(20 + t * 0.5, 1240.0 + t * 1.0, 0.0) for t in range(20)]
+    land, saw = landing(plane + descent + ground, DEFAULTS)
+    assert saw is True
+    assert land.t >= 19.0 and land.x > 1000
+    # a stream that starts after the drop says so instead of guessing
+    land2, saw2 = landing(ground, DEFAULTS)
+    assert saw2 is False and land2.t == ground[0].t
+
+
+def test_a_tracking_hole_is_not_movement():
+    a = [Sample(t * 0.5, 100.0 + t * 8.0, 100.0) for t in range(20)]     # moving
+    b = [Sample(300 + t * 0.5, 5000.0 + t * 8.0, 100.0) for t in range(20)]
+    segs = segments(a + b, DEFAULTS)
+    assert all(x.t1 - x.t0 < 60 for x in segs), [(x.kind, x.t0, x.t1) for x in segs]
+    assert all(x.distance_m < 1000 for x in segs)

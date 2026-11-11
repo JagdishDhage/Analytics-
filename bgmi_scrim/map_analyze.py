@@ -276,9 +276,13 @@ def _team_paths(records: Sequence[Dict[str, Any]], threshold: float
              float(r.get("confidence", 1.0))))
     out: Dict[str, List[Sample]] = {}
     link_m = 350.0
+    max_speed = 60.0          # a squad on the ground, with headroom for vehicles
+    drop_window_s = 150.0
     for team, times in by_t.items():
         path: List[Sample] = []
         prev: Optional[Tuple[float, float]] = None
+        prev_t: Optional[float] = None
+        t_first = min(times) if times else 0.0
         for t in sorted(times):
             rows = times[t]
             groups = _spatial_groups(rows, link_m)
@@ -289,9 +293,21 @@ def _team_paths(records: Sequence[Dict[str, Any]], threshold: float
                     math.dist((r[0], r[1]), prev) for r in g))
             cx = sum(r[0] for r in pick) / len(pick)
             cy = sum(r[1] for r in pick) / len(pick)
+            if prev is not None and prev_t is not None:
+                dt = max(1e-3, t - prev_t)
+                # during the drop a squad really does cross the map, under a
+                # parachute; after it, nothing does
+                cap = 400.0 if t <= t_first + drop_window_s else max_speed
+                if math.dist((cx, cy), prev) / dt > cap:
+                    # No squad crosses the map in half a second. The median of
+                    # a team's dots flips between separated players, which
+                    # would otherwise read as a rotation at aircraft speed:
+                    # leave a hole instead of inventing the journey.
+                    continue
             path.append(Sample(t, cx, cy, sum(r[3] for r in pick) / len(pick),
                                sum(r[2] for r in pick)))
             prev = (cx, cy)
+            prev_t = t
         out[team] = path
     return out
 
@@ -328,15 +344,21 @@ def _spatial_groups(rows: Sequence[Tuple[float, float, int, float]], link_m: flo
 
 def _unit_events(who: Dict[str, Any], samples: Sequence[Sample], world: WorldMap,
                  ph_list: Sequence[Phase], blue: Sequence[ZoneSample],
-                 cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
+                 cfg: Dict[str, Any], t0: Optional[float] = None) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     conf = sum(s.confidence for s in samples) / len(samples)
-    land = landing(samples, cfg)
+    land, saw_descent = landing(samples, cfg, t0)
     if land is not None:
-        out.append({"type": "landing", "t": round(land.t, 2), **who,
-                    "x_m": round(land.x, 1), "y_m": round(land.y, 1),
-                    "place": world.place(land.x, land.y), "confidence": round(conf, 3)})
-    for seg in segments(samples, cfg):
+        rec: Dict[str, Any] = {"type": "landing", "t": round(land.t, 2), **who,
+                               "x_m": round(land.x, 1), "y_m": round(land.y, 1),
+                               "place": world.place(land.x, land.y),
+                               "confidence": round(conf if saw_descent else conf * 0.6, 3)}
+        if not saw_descent:
+            rec["state"] = "no_descent_seen"
+            rec["note"] = "stream starts after the drop; this is the first tracked position"
+        out.append(rec)
+    ground = [s for s in samples if land is None or s.t >= land.t]
+    for seg in segments(ground, cfg):
         rec: Dict[str, Any] = {"type": seg.kind, "t": round(seg.t0, 2),
                                "t_end": round(seg.t1, 2), **who,
                                "duration_s": round(seg.duration, 1),
@@ -356,7 +378,10 @@ def _unit_events(who: Dict[str, Any], samples: Sequence[Sample], world: WorldMap
                 rec["phase"] = ph.number
                 rec["after_announce_s"] = round(seg.t0 - ph.announced_t, 1)
                 if ph.closed_t is not None:
-                    rec["before_close_s"] = round(ph.closed_t - seg.t1, 1)
+                    margin = ph.closed_t - seg.t1
+                    rec["before_close_s"] = round(margin, 1)
+                    if margin < 0:
+                        rec["arrived_after_close_s"] = round(-margin, 1)
         out.append(rec)
     for ph in ph_list:
         hit = zone_entry(samples, ph)
@@ -405,17 +430,18 @@ def derive_events(records: Sequence[Dict[str, Any]], prof: MapProfile,
                     "closed_t": round(ph.closed_t, 2) if ph.closed_t is not None else None})
 
     teams = _team_paths(records, thr)
+    t0 = min((float(r["t"]) for r in records if r.get("type") == "sample"), default=0.0)
     for team, samples in sorted(teams.items()):
         if len(samples) < 2:
             continue
         members = max(s.cluster for s in samples)
-        out.extend(_unit_events({"team": team, "unit": "team",
-                                 "dots_max": members}, samples, world, ph_list, blue, cfg))
+        out.extend(_unit_events({"team": team, "unit": "team", "dots_max": members},
+                                samples, world, ph_list, blue, cfg, t0))
     for (team, player), samples in sorted(_player_paths(records, thr).items()):
         if len(samples) < 2:
             continue
         out.extend(_unit_events({"team": team, "player": player, "unit": "player"},
-                                samples, world, ph_list, blue, cfg))
+                                samples, world, ph_list, blue, cfg, t0))
 
     for team, samples in teams.items():
         players = _player_paths(records, thr)

@@ -208,15 +208,17 @@ def score(labels_path: str | Path, tracks_path: str | Path, prof: MapProfile,
     return rep
 
 
-def _team_landings(events: Sequence[Dict[str, Any]]) -> Dict[str, Tuple[float, float, float, str]]:
-    """Earliest landing per team: (t, x, y, place)."""
-    out: Dict[str, Tuple[float, float, float, str]] = {}
+def _team_landings(events: Sequence[Dict[str, Any]]
+                   ) -> Dict[str, Tuple[float, float, float, str, bool]]:
+    """Earliest landing per team: (t, x, y, place, descent_seen)."""
+    out: Dict[str, Tuple[float, float, float, str, bool]] = {}
     for e in events:
-        if e["type"] != "landing":
+        if e["type"] != "landing" or e.get("unit") not in (None, "team"):
             continue
         cur = out.get(e["team"])
         if cur is None or float(e["t"]) < cur[0]:
-            out[e["team"]] = (float(e["t"]), float(e["x_m"]), float(e["y_m"]), e["place"])
+            out[e["team"]] = (float(e["t"]), float(e["x_m"]), float(e["y_m"]),
+                              e["place"], e.get("state") != "no_descent_seen")
     return out
 
 
@@ -257,15 +259,31 @@ def _compare_behaviour(truth: Sequence[Dict[str, Any]],
 
     tl, gl = _team_landings(truth), _team_landings(got)
     both = sorted(set(tl) & set(gl))
-    place_ok = sum(1 for k in both if tl[k][3] == gl[k][3])
-    derr = [math.dist((tl[k][1], tl[k][2]), (gl[k][1], gl[k][2])) for k in both]
-    terr = [abs(tl[k][0] - gl[k][0]) for k in both]
+    seen = [k for k in both if gl[k][4]]        # a descent was actually observed
+    unseen = [k for k in both if not gl[k][4]]
+
+    def _part(keys):
+        if not keys:
+            return {"n": 0}
+        ok = sum(1 for k in keys if tl[k][3] == gl[k][3])
+        return {"n": len(keys), "same_place": ok,
+                "place_agreement": round(ok / len(keys), 4),
+                "position_error_m": _stats([math.dist((tl[k][1], tl[k][2]),
+                                                      (gl[k][1], gl[k][2])) for k in keys]),
+                "time_error_s": round(statistics.median(
+                    [abs(tl[k][0] - gl[k][0]) for k in keys]), 2)}
+
     out["team_landings"] = {
         "truth_teams": len(tl), "extracted_teams": len(gl), "matched": len(both),
-        "same_place": place_ok,
-        "place_agreement": round(place_ok / len(both), 4) if both else None,
-        "position_error_m": _stats(derr),
-        "time_error_s": round(statistics.median(terr), 2) if terr else None,
+        "descent_seen": _part(seen),
+        "no_descent_seen": _part(unseen),
+        "same_place": sum(1 for k in both if tl[k][3] == gl[k][3]),
+        "place_agreement": round(sum(1 for k in both if tl[k][3] == gl[k][3]) / len(both), 4)
+        if both else None,
+        "position_error_m": _stats([math.dist((tl[k][1], tl[k][2]), (gl[k][1], gl[k][2]))
+                                    for k in both]),
+        "time_error_s": round(statistics.median([abs(tl[k][0] - gl[k][0]) for k in both]), 2)
+        if both else None,
     }
 
     tr, gr = _team_rotations(truth), _team_rotations(got)
@@ -325,9 +343,15 @@ def render_map_report(rep: MapReport, title: str = "Phase 3 map-stream accuracy"
           f"announce ±{b['phases']['announce_time_error_s']} s, centre "
           f"{b['phases']['centre_error_m']} m, radius {b['phases']['radius_error_m']} m |",
           f"| team landings | {pl['truth_teams']} | {pl['extracted_teams']} | "
-          f"{pl['matched']} matched, same place {pl['place_agreement']}, "
-          f"median position error {pl['position_error_m'].get('median_m')} m, "
-          f"median time error {pl['time_error_s']} s |",
+          f"{pl['matched']} matched, same place {pl['place_agreement']} |",
+          f"| ... where a descent was seen | - | {pl['descent_seen'].get('n', 0)} | "
+          f"same place {pl['descent_seen'].get('place_agreement')}, "
+          f"position {pl['descent_seen'].get('position_error_m', {}).get('median_m')} m, "
+          f"time {pl['descent_seen'].get('time_error_s')} s |",
+          f"| ... where the team was only identified later | - | "
+          f"{pl['no_descent_seen'].get('n', 0)} | "
+          f"same place {pl['no_descent_seen'].get('place_agreement')}, "
+          f"position {pl['no_descent_seen'].get('position_error_m', {}).get('median_m')} m |",
           f"| team rotations | {b['team_rotations']['teams_with_rotations_truth']} teams | "
           f"{b['team_rotations']['extracted']} teams | "
           f"median count difference {b['team_rotations']['median_count_difference']}, "

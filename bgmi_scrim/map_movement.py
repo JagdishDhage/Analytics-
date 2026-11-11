@@ -17,7 +17,9 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 DEFAULTS = {
-    "land_speed_mps": 12.0, "land_hold_s": 2.0,
+    "land_speed_mps": 12.0, "land_hold_s": 2.0, "air_speed_mps": 25.0,
+    "drop_window_s": 150.0,
+    "max_sample_gap_s": 10.0,
     "loot_speed_mps": 2.5, "loot_min_s": 15.0,
     "move_speed_mps": 3.0, "rotation_min_m": 200.0, "rotation_gap_s": 6.0,
     "rotation_min_displacement_m": 150.0,
@@ -93,26 +95,38 @@ def smooth(values: Sequence[float], k: int = 3) -> List[float]:
     return out
 
 
-def landing(samples: Sequence[Sample], cfg: Dict[str, Any]) -> Optional[Sample]:
-    """First sample after which the player stays slow enough to be on the ground."""
+def landing(samples: Sequence[Sample], cfg: Dict[str, Any],
+            t0: Optional[float] = None) -> Tuple[Optional[Sample], bool]:
+    """Where a unit came down, and whether a descent was actually seen.
+
+    A dot sitting still in the aircraft is slow, so "first slow moment" lands
+    everyone in the plane. The descent is the giveaway: nothing on the ground
+    crosses the map at air speed, so landing is the first slow moment *after*
+    the last fast one. When the stream starts after the drop there is no
+    descent to find, and that is reported rather than papered over.
+    """
     if not samples:
-        return None
+        return None, False
     sp = smooth(speeds(samples))
     hold = float(cfg.get("land_hold_s", DEFAULTS["land_hold_s"]))
     limit = float(cfg.get("land_speed_mps", DEFAULTS["land_speed_mps"]))
-    for i, s in enumerate(samples):
-        if sp[i] > limit:
-            continue
-        j = i
-        while j < len(samples) and samples[j].t - s.t < hold:
-            if sp[j] > limit:
-                break
-            j += 1
-        else:
-            return s
-        if samples[j - 1].t - s.t >= hold:
-            return s
-    return samples[0]
+    air = float(cfg.get("air_speed_mps", DEFAULTS["air_speed_mps"]))
+    # The drop happens once, early. Only a descent inside the drop window
+    # counts, so a tracking jump in the middle of a match cannot be mistaken
+    # for one.
+    start = samples[0].t if t0 is None else t0
+    window = float(cfg.get("drop_window_s", DEFAULTS["drop_window_s"]))
+    first_air = next((i for i, v in enumerate(sp)
+                      if v >= air and samples[i].t <= start + window), None)
+    if first_air is None:
+        return samples[0], False
+    # Landing is where the descent ends, not where the squad finally stops:
+    # after touching down a squad keeps moving, and waiting for it to be still
+    # puts the drop minutes late and in the wrong place.
+    for i in range(first_air + 1, len(samples)):
+        if sp[i] < air:
+            return samples[i], True
+    return samples[-1], True
 
 
 def segments(samples: Sequence[Sample], cfg: Dict[str, Any]) -> List[Segment]:
@@ -124,11 +138,15 @@ def segments(samples: Sequence[Sample], cfg: Dict[str, Any]) -> List[Segment]:
     out: List[Segment] = []
     i = 0
     n = len(samples)
+    max_gap = float(c.get("max_sample_gap_s", DEFAULTS["max_sample_gap_s"]))
     while i < n:
         moving = sp[i] >= c["move_speed_mps"]
         j = i + 1
         gap = 0.0
         while j < n:
+            # a hole in the tracking is not movement: never span one
+            if samples[j].t - samples[j - 1].t > max_gap:
+                break
             is_move = sp[j] >= c["move_speed_mps"]
             if is_move == moving:
                 gap = 0.0
@@ -137,10 +155,11 @@ def segments(samples: Sequence[Sample], cfg: Dict[str, Any]) -> List[Segment]:
                 if gap > c["rotation_gap_s"]:
                     break
             j += 1
-        a, b = samples[i], samples[min(j, n - 1)]
-        seg_sp = sp[i:max(i + 1, j)]
+        end = max(i, j - 1)          # the last sample that belongs to this stretch
+        a, b = samples[i], samples[end]
+        seg_sp = sp[i:end + 1]
         dist = sum(math.dist((samples[k].x, samples[k].y), (samples[k + 1].x, samples[k + 1].y))
-                   for k in range(i, min(j, n - 1)))
+                   for k in range(i, end))
         dur = max(1e-3, b.t - a.t)
         seg = Segment("rotation" if moving else "loot", a.t, b.t, a.x, a.y, b.x, b.y,
                       dist, dist / dur, max(seg_sp) if seg_sp else 0.0,
