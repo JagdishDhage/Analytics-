@@ -182,7 +182,7 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
                         map_events_paths=args.map_events, block_name=args.block,
                         placement_points=table,
                         confidence_threshold=args.confidence_threshold)
-    out = write_dashboard(args.out, model)
+    out = write_dashboard(args.out, model, artifact=args.artifact)
     size = Path(out).stat().st_size
     print(f"wrote {out} ({size/1024:.0f} KB, {len(model['matches'])} matches)")
     return 0
@@ -304,6 +304,8 @@ def build_parser() -> argparse.ArgumentParser:
     db.add_argument("--points-table", default=None)
     db.add_argument("--confidence-threshold", type=float, default=0.6)
     db.add_argument("--out", default="dashboard.html")
+    db.add_argument("--artifact", action="store_true",
+                    help="emit the body-only variant for publishing as an artifact")
     db.set_defaults(func=cmd_dashboard)
 
     mr = sub.add_parser("mapreport", help="phase 3: map report (drops, rotations, zones)")

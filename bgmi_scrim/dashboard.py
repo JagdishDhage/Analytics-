@@ -228,14 +228,36 @@ def build_model(events_paths: Sequence[str], team: str,
     }
 
 
-def render_html(model: Dict[str, Any]) -> str:
+ARTIFACT_CSS = """
+<style>
+/* published-page variant: the host wraps the file, so the page keeps its own
+   dark palette and clears a system bar at the phone's side */
+:root{color-scheme:dark}
+.masthead,.stage,.sheets,.foot{
+  padding-left:max(var(--gut),env(safe-area-inset-left,0px));
+  padding-right:max(var(--gut),env(safe-area-inset-right,0px));
+}
+.rail{padding-left:max(14px,env(safe-area-inset-left,0px))}
+.readout{padding-right:max(16px,env(safe-area-inset-right,0px))}
+</style>
+"""
+
+
+def render_html(model: Dict[str, Any], artifact: bool = False) -> str:
     tpl = (Path(__file__).parent / "dashboard_template.html").read_text()
+    tpl = tpl.replace("<title>Scrim block</title>",
+                      f"<title>{model['team']} {model['block']}</title>")
+    if artifact:
+        head = tpl[tpl.index("<title>"):tpl.index("</head>")]
+        body = tpl[tpl.index("<body>") + len("<body>"):tpl.index("</body>")]
+        tpl = ('<meta name="claude:viewport-fit-sides" content="cover">\n'
+               + head + ARTIFACT_CSS + body)
     return tpl.replace("/*%%MODEL%%*/null",
                        json.dumps(model, separators=(",", ":"), allow_nan=False))
 
 
-def write_dashboard(out_path: str, model: Dict[str, Any]) -> str:
-    html = render_html(model)
+def write_dashboard(out_path: str, model: Dict[str, Any], artifact: bool = False) -> str:
+    html = render_html(model, artifact=artifact)
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     Path(out_path).write_text(html)
     return out_path
