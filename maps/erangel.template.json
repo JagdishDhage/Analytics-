@@ -1,0 +1,6 @@
+{
+  "map": "ERANGEL",
+  "world_size_m": 8000,
+  "_note": "Template. Fill in with 'mapcalibrate --pois' against your own footage; coordinates are in metres from the top-left of the playable map.",
+  "pois": []
+}
