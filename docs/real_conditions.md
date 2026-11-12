@@ -1,6 +1,6 @@
 # Real-capture conditions
 
-Measured at commit `d12b67c`. Every earlier number in this repository came
+Measured at commit `6a285ae`. Every earlier number in this repository came
 from footage rendered exactly as the profile expected it. A real VOD is
 compressed, often rescaled, and often letterboxed, so these runs take the same
 clips and the same labels through an encoder first. They are still synthetic
@@ -33,9 +33,9 @@ the bars; without it a profile reads the wrong pixels and reports nothing.
 | capture | position median | p90 | team identity | dot coverage | zone phases |
 |---|---|---|---|---|---|
 | heavy compression, crf 34 | 7.72 m | 20.87 m | 0.9702 | 0.88 | 8 → 8 |
-| rescaled to 1280x720 | 11.81 m | 17.38 m | 0.8578 | 0.8818 | 8 → 8 |
+| rescaled to 1280x720 | 11.79 m | 17.5 m | 0.9785 | 0.8818 | 8 → 8 |
 | letterboxed into 1920x1080 | 8.55 m | 15.39 m | 0.9798 | 0.8733 | 8 → 8 |
-| clean 1080p (regression check) | 7.39 m | 25.94 m | 0.9666 | 0.8654 | 8 → 8 |
+| clean 1080p (regression check) | 7.32 m | 26.09 m | 0.9858 | 0.8654 | 8 → 8 |
 
 ## What broke, and why
 
