@@ -8,14 +8,16 @@ is drawn as unknown rather than rounded into a number.
 from __future__ import annotations
 
 import json
+import statistics
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .events import read_jsonl
+from .positional import PositionalMatch, positional_matches
 from .report import (CONVERSION_WINDOW_S, DEFAULT_PLACEMENT_POINTS, KILL_POINTS,
                      TRADE_WINDOW_S, _collect, _dropped_counts, _focuses, _phase_at,
-                     _split_matches)
+                     _split_matches, not_measurable)
 
 PATH_STEP_S = 2.0          # map paths are thinned to this, to keep the file small
 
@@ -98,6 +100,36 @@ def _map_block(tracks_path: Optional[str], map_events_path: Optional[str],
             "ourTeam": info.get("our_team")}
 
 
+def _positional_block(pm: Optional[PositionalMatch]) -> Optional[Dict[str, Any]]:
+    """Per-match positioning, from the phase-3 logs; None without a map stream."""
+    if pm is None:
+        return None
+    return {
+        "landed": None if not pm.landing else {
+            "t": round(pm.landing["t"], 1), "place": pm.landing["place"],
+            "sure": pm.landing["sure"]},
+        "lootS": round(pm.loot_s),
+        "rotations": len(pm.rotations),
+        "distance": round(pm.rotation_distance_m),
+        "vehicleTime": round(pm.vehicle_time_s),
+        "footTime": round(pm.foot_time_s),
+        "edgeFraction": pm.edge_fraction,
+        "outsideBlue": (None if pm.time_outside_blue_s is None
+                        else round(float(pm.time_outside_blue_s))),
+        "perPhase": [{"phase": int(r.get("phase")), "t": round(float(r["t"]), 1),
+                      "tEnd": round(float(r["t_end"]), 1), "mode": r.get("mode"),
+                      "from": r.get("from"), "to": r.get("to"),
+                      "distance": round(float(r.get("distance_m", 0))),
+                      "delay": (None if r.get("continued")
+                                else r.get("after_announce_s")),
+                      "continued": bool(r.get("continued")),
+                      "ranInto": bool(r.get("ran_into_next_phase")),
+                      "margin": r.get("before_close_s")}
+                     for r in pm.rotations if r.get("phase") is not None],
+        "positions": pm.positions,
+    }
+
+
 def build_model(events_paths: Sequence[str], team: str,
                 tracks_paths: Optional[Sequence[str]] = None,
                 map_events_paths: Optional[Sequence[str]] = None,
@@ -109,6 +141,10 @@ def build_model(events_paths: Sequence[str], team: str,
     facts = [_collect(m, team) for m in matches]
     tracks_paths = list(tracks_paths or [])
     map_events_paths = list(map_events_paths or [])
+
+    pms = positional_matches([m.number for m in matches], tracks_paths,
+                             map_events_paths, team, confidence_threshold)
+    by_number = {pm.number: pm for pm in pms}
 
     out_matches: List[Dict[str, Any]] = []
     cum = 0
@@ -135,6 +171,7 @@ def build_model(events_paths: Sequence[str], team: str,
             "events": _match_events(m, team),
             "aliveTimes": alive,
             "map3": mp,
+            "positional": _positional_block(by_number.get(m.number)),
         })
 
     # ---- block-level tables, same definitions as the markdown report ----
@@ -187,10 +224,11 @@ def build_model(events_paths: Sequence[str], team: str,
                                          lost, lost_den,
                                          [(p["m"], {"t": p["t"], "victim_slot": p["slot"],
                                                     "killer_team": p["killer"]})
-                                          for p in pre3])[:3]]
+                                          for p in pre3], pms)[:3]]
     quality = _dropped_counts(events_paths, confidence_threshold)
-    from .report import NOT_MEASURABLE
-    from .map_report import NOT_MEASURABLE as MAP_NOT_MEASURABLE
+    delays = [d for pm in pms for d in pm.delays]
+    veh = sum(pm.vehicle_time_s for pm in pms)
+    moving = sum(pm.moving_time_s for pm in pms)
 
     return {
         "team": team, "block": block_name,
@@ -223,8 +261,17 @@ def build_model(events_paths: Sequence[str], team: str,
         "unattributedDeaths": unattributed,
         "focuses": focuses,
         "quality": quality,
-        "notMeasurable": list(NOT_MEASURABLE),
-        "mapNotMeasurable": list(MAP_NOT_MEASURABLE),
+        "positionalBlock": None if not pms else {
+            "matches": len(pms),
+            "medianDelay": round(statistics.median(delays), 1) if delays else None,
+            "delayCount": len(delays),
+            "vehicleTime": round(veh),
+            "movingTime": round(moving),
+            "vehicleShare": round(veh / moving, 3) if moving else None,
+            "rotations": sum(len(pm.rotations) for pm in pms),
+            "distance": round(sum(pm.rotation_distance_m for pm in pms)),
+        },
+        "notMeasurable": not_measurable(bool(pms)),
     }
 
 

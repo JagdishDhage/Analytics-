@@ -1,9 +1,14 @@
-"""Phase 2: team preparation report, built only from phase-1 event logs.
+"""Phase 2: team preparation report, built from the event logs.
 
-Nothing is inferred that the event log does not contain. A metric that needs
-data phase 1 does not extract (positions, damage, utility, rotations) is not
-estimated; it is listed under "Not measurable yet". Every figure carries the
+Nothing is inferred that the logs do not contain. A metric that needs data no
+supplied log carries is not estimated; it is listed under "Not measurable
+yet", and that list shrinks when more logs are given. Every figure carries the
 match number and the video timestamp it came from.
+
+With phase-1 events alone the report covers results, survival, fights and
+opponents. Pass the phase-3 map logs as well and it also covers positioning,
+rotations, zone-edge play and vehicle time, which are then no longer listed as
+unmeasurable.
 """
 from __future__ import annotations
 
@@ -13,6 +18,8 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .events import read_jsonl
+from .positional import (PositionalMatch, focus_candidates, positional_matches,
+                         render_section)
 
 # Placement points are an organiser rule, not something the footage contains,
 # so the table is data with a documented default (BGMI/PMGO squad scheme).
@@ -21,9 +28,8 @@ KILL_POINTS = 1
 TRADE_WINDOW_S = 15.0
 CONVERSION_WINDOW_S = 60.0
 
-NOT_MEASURABLE = [
-    "Positioning, rotations, zone-edge play, vehicle time: needs minimap or "
-    "positional data; phase 1 reads no map pixels.",
+#: Limits that hold whatever logs are supplied.
+NOT_MEASURABLE_ALWAYS = [
     "Damage dealt or taken, weapons, attachments, utility (grenades, smokes): "
     "not shown in the spectator HUD regions phase 1 reads.",
     "Who revived whom, revive timings and self-revive: a revive shows only as a "
@@ -34,6 +40,34 @@ NOT_MEASURABLE = [
     "Individual player names: the panel is read as team tag plus slot number, so "
     "per-player identity across matches is slot-based only.",
 ]
+
+#: Limits that only hold while no map stream has been analysed.
+NOT_MEASURABLE_WITHOUT_MAP = [
+    "Positioning, rotations, zone-edge play, vehicle time: needs a map stream; "
+    "phase 1 reads no map pixels. Analyse the map recording with `mapanalyze` "
+    "and pass --tracks/--map-events to measure all four.",
+]
+
+#: What a map stream still cannot answer once it has been analysed.
+NOT_MEASURABLE_WITH_MAP = [
+    "Elevation, buildings, and whether a team is inside or outside: the map "
+    "stream is a flat top-down view.",
+    "Which player of a squad is which while their dots overlap: at the map's "
+    "scale team-mates standing together are one dot, so positions are per team "
+    "with players named only where a label was legible.",
+    "Vehicle type and whether a team is in one at all: only speed is measured, "
+    "and the foot/vehicle split is a speed threshold.",
+]
+
+
+def not_measurable(has_map: bool) -> List[str]:
+    """The limits that actually apply, given which logs were supplied."""
+    return list(NOT_MEASURABLE_ALWAYS) + list(
+        NOT_MEASURABLE_WITH_MAP if has_map else NOT_MEASURABLE_WITHOUT_MAP)
+
+
+#: Backwards-compatible name: the no-map list.
+NOT_MEASURABLE = not_measurable(False)
 
 
 def _fmt_ts(t: float) -> str:
@@ -156,10 +190,14 @@ def _collect(m: Match, team: str) -> MatchFacts:
 def build_report(event_paths: Sequence[str], team: str, block_name: str = "scrim block",
                  placement_points: Optional[Dict[int, int]] = None,
                  confidence_threshold: float = 0.6,
-                 asked_for: Optional[Sequence[str]] = None) -> str:
+                 asked_for: Optional[Sequence[str]] = None,
+                 tracks_paths: Optional[Sequence[str]] = None,
+                 map_events_paths: Optional[Sequence[str]] = None) -> str:
     pts = {int(k): int(v) for k, v in (placement_points or DEFAULT_PLACEMENT_POINTS).items()}
     matches = _split_matches(event_paths, confidence_threshold)
     facts = [_collect(m, team) for m in matches]
+    pms = positional_matches([m.number for m in matches], list(tracks_paths or []),
+                             list(map_events_paths or []), team, confidence_threshold)
     quality = _dropped_counts(event_paths, confidence_threshold)
     L: List[str] = []
     L.append(f"# {team} — {block_name} preparation report")
@@ -378,10 +416,14 @@ def build_report(event_paths: Sequence[str], team: str, block_name: str = "scrim
              f"Those are excluded from this table rather than assigned.")
     L.append("")
 
-    # ---------------- 5. Practice focuses ----------------
-    L.append("## 5. Practice focuses")
+    # ---------------- 5. Positioning and rotations ----------------
+    L.extend(render_section(pms, "## 5. Positioning and rotations"))
+
+    # ---------------- 6. Practice focuses ----------------
+    L.append("## 6. Practice focuses")
     L.append("")
-    focuses = _focuses(facts, trades, trade_chances, conv, conv_den, lost, lost_den, pre3_all)
+    focuses = _focuses(facts, trades, trade_chances, conv, conv_den, lost, lost_den,
+                       pre3_all, pms)
     for i, (title, evidence, target) in enumerate(focuses[:3], start=1):
         L.append(f"{i}. **{title}**")
         L.append(f"   - Evidence: {evidence}")
@@ -390,22 +432,27 @@ def build_report(event_paths: Sequence[str], team: str, block_name: str = "scrim
         L.append("The log holds too few attributed events in this block to rank focuses.")
     L.append("")
 
-    # ---------------- 6. Not measurable yet ----------------
-    L.append("## 6. Not measurable yet")
+    # ---------------- 7. Not measurable yet ----------------
+    L.append("## 7. Not measurable yet")
     L.append("")
-    for item in NOT_MEASURABLE:
+    for item in not_measurable(bool(pms)):
         L.append(f"- {item}")
     for ask in (asked_for or []):
-        L.append(f"- Asked for: \"{ask}\" — the phase-1 event log has no field that supports it.")
+        L.append(f"- Asked for: \"{ask}\" — no supplied log has a field that supports it.")
     L.append("")
     return "\n".join(L)
 
 
 def _focuses(facts: List[MatchFacts], trades: int, trade_chances: int, conv: int,
              conv_den: int, lost: int, lost_den: int,
-             pre3: List[Tuple[int, Dict[str, Any]]]) -> List[Tuple[str, str, str]]:
-    """Rank candidate focuses by the size of the measured gap."""
-    out: List[Tuple[float, Tuple[str, str, str]]] = []
+             pre3: List[Tuple[int, Dict[str, Any]]],
+             pms: Optional[Sequence[PositionalMatch]] = None) -> List[Tuple[str, str, str]]:
+    """Rank candidate focuses by the size of the measured gap.
+
+    Positional candidates join the same ranking when a map stream was
+    analysed, so a rotation habit can outrank a fight habit on the evidence.
+    """
+    out: List[Tuple[float, Tuple[str, str, str]]] = list(focus_candidates(pms or []))
     if trade_chances:
         rate = trades / trade_chances
         worst = None

@@ -70,6 +70,7 @@ class Segment:
     peak_speed: float
     mode: str = ""            # foot | vehicle (rotations only)
     displacement_m: float = 0.0
+    continued: bool = False   # this part carried on from the previous phase
 
     @property
     def duration(self) -> float:
@@ -193,6 +194,37 @@ def _median_filter(zs: Sequence[ZoneSample], k: int = 3) -> List[ZoneSample]:
         m = len(win) // 2
         out.append(ZoneSample(z.t, z.ring, xs[m], ys[m], rs[m], z.confidence))
     return out
+
+
+def split_at(seg: Segment, samples: Sequence[Sample], cuts: Sequence[float],
+             cfg: Dict[str, Any]) -> List[Segment]:
+    """Cut a movement at the given times, recomputing each part from the track.
+
+    A squad that keeps driving through two circle announcements has not made
+    one rotation, it has made the rotation for each of those circles, and a
+    coach reads them per phase. Splitting at the announcements is what lets
+    the delay and the margin be measured against the right circle.
+    """
+    c = {**DEFAULTS, **(cfg or {})}
+    inner = sorted(x for x in cuts if seg.t0 + 1e-6 < x < seg.t1 - 1e-6)
+    if not inner:
+        return [seg]
+    bounds = [seg.t0] + inner + [seg.t1]
+    parts: List[Segment] = []
+    for a, b in zip(bounds, bounds[1:]):
+        sub = [s for s in samples if a - 1e-9 <= s.t <= b + 1e-9]
+        if len(sub) < 2:
+            continue
+        dist = sum(math.dist((p.x, p.y), (q.x, q.y)) for p, q in zip(sub, sub[1:]))
+        dur = max(1e-3, sub[-1].t - sub[0].t)
+        sp = smooth(speeds(sub))
+        p90 = sorted(sp)[int(0.9 * (len(sp) - 1))] if sp else 0.0
+        part = Segment("rotation", sub[0].t, sub[-1].t, sub[0].x, sub[0].y,
+                       sub[-1].x, sub[-1].y, dist, dist / dur, max(sp) if sp else 0.0,
+                       mode="vehicle" if p90 >= c["vehicle_speed_mps"] else "foot",
+                       displacement_m=math.dist((sub[0].x, sub[0].y), (sub[-1].x, sub[-1].y)))
+        parts.append(part)
+    return parts or [seg]
 
 
 def phases(zone: Sequence[ZoneSample], min_shrink: float = 0.08,

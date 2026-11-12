@@ -18,14 +18,9 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 from .events import read_jsonl
 from .map_world import WorldMap
 
-NOT_MEASURABLE = [
-    "Elevation, buildings and whether a team is inside or outside: the map "
-    "stream is a flat top-down view.",
-    "Which player of a squad is which while their dots overlap: at the map's "
-    "scale team-mates standing together are one dot, so positions are reported "
-    "per team with the player named only where the stream showed a readable name.",
-    "Vehicle type, fuel or whether a team is on foot in a vehicle's shadow: "
-    "only speed is measurable, and the foot/vehicle split is a speed threshold.",
+from .report import NOT_MEASURABLE_WITH_MAP
+
+NOT_MEASURABLE = NOT_MEASURABLE_WITH_MAP + [
     "The zone timer itself: phase announcements and closes are read from the "
     "circles moving, not from the countdown.",
     "Damage, knocks and kills: those come from the HUD stream (phase 1). Pass "

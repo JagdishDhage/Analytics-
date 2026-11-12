@@ -4,7 +4,8 @@
     calibrate <video> [--interactive | --template base.json | --preview p.json]
     truth     --labels labels.jsonl --events events.jsonl [--md report.md]
     synth     --out clip.mp4 --labels labels.jsonl        (test footage)
-    report    --events e1.jsonl e2.jsonl ... --team TX --out report.md   (phase 2)
+    report    --events e1.jsonl ... [--tracks t1.jsonl ... --map-events me1.jsonl ...]
+          --team TX --out report.md                                   (phase 2)
 
 mapanalyze <map video> --profile mp.json --tracks t.jsonl --map-events me.jsonl
 mapcalibrate <map video> [--template base.json | --preview mp.json | --pois maps/x.json]
@@ -90,7 +91,8 @@ def cmd_report(args: argparse.Namespace) -> int:
     md = build_report(args.events, team=args.team, block_name=args.block,
                       placement_points=table,
                       confidence_threshold=args.confidence_threshold,
-                      asked_for=args.asked_for or [])
+                      asked_for=args.asked_for or [],
+                      tracks_paths=args.tracks, map_events_paths=args.map_events)
     if args.out:
         Path(args.out).write_text(md + "\n")
         print(f"wrote {args.out}")
@@ -327,6 +329,12 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--team", required=True)
     r.add_argument("--block", default="scrim block")
     r.add_argument("--out", default=None)
+    r.add_argument("--tracks", nargs="*", default=None,
+                   help="phase-3 tracks.jsonl per match, same order as --events")
+    r.add_argument("--map-events", nargs="*", default=None,
+                   help="phase-3 map events per match, same order as --events; "
+                        "supplying these measures positioning, rotations, "
+                        "zone-edge play and vehicle time")
     r.add_argument("--points-table", default=None,
                    help="JSON file mapping placement -> points (organiser rule)")
     r.add_argument("--confidence-threshold", type=float, default=0.6)

@@ -180,6 +180,8 @@ td.num,th.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
 tr:hover td{background:var(--panel)}
 .delta-up{color:var(--bone)}
 .delta-down{color:var(--flare)}
+.pos-sub{font-family:var(--display);font-stretch:125%;font-size:16px;font-weight:700;
+  margin:26px 0 10px}
 .focus{display:grid;gap:6px;padding:16px 0;border-bottom:1px solid var(--line)}
 .focus-rank{font-family:var(--mono);font-size:11px;color:var(--zone);letter-spacing:.14em}
 .focus-title{font-family:var(--display);font-stretch:125%;font-size:18px;font-weight:700}
@@ -266,6 +268,12 @@ tr:hover td{background:var(--panel)}
   <section class="sheet"><h2>Fights</h2>
     <p class="sheet-note" id="fightsNote"></p>
     <div class="tscroll"><table id="phaseTable"></table></div></section>
+  <section class="sheet" id="posSheet" hidden><h2>Positioning and rotations</h2>
+    <p class="sheet-note" id="posNote"></p>
+    <div class="tscroll"><table id="posTable"></table></div>
+    <p class="sheet-note" id="posSummary"></p>
+    <h3 class="pos-sub" id="posSubTitle">Rotations</h3>
+    <div class="tscroll"><table id="posPhaseTable"></table></div></section>
   <section class="sheet"><h2>Opponents</h2>
     <p class="sheet-note" id="oppNote"></p>
     <div class="tscroll"><table id="oppTable"></table></div></section>
@@ -516,6 +524,30 @@ function markRibbon(t) {
 }
 
 /* ---------- timeline ---------- */
+function paintPositioningPhases() {
+  const m = currentMatch();
+  const sheet = $("posSheet");
+  if (sheet.hidden) return;
+  const p = m.positional;
+  $("posSubTitle").textContent = `Rotations in match ${m.n}`;
+  if (!p || !p.perPhase.length) {
+    table($("posPhaseTable"), [{ label: "phase" }, { label: "what the log holds" }],
+      [[null, "No rotation for this match in the logs."]]);
+    return;
+  }
+  table($("posPhaseTable"),
+    [{ label: "phase" }, { label: "started", num: 1 }, { label: "delay", num: 1 },
+     { label: "mode" }, { label: "from → to" }, { label: "distance", num: 1 },
+     { label: "ended", num: 1 }, { label: "margin to close" }],
+    p.perPhase.map(r => [r.phase, clock(r.t),
+      r.continued ? "already moving" : (r.delay == null ? null : r.delay.toFixed(0) + " s"),
+      r.mode, `${r.from} → ${r.to}`, r.distance + " m", clock(r.tEnd),
+      r.ranInto ? "still moving at the next announcement"
+        : r.margin == null ? null
+        : r.margin < 0 ? `${Math.round(-r.margin)} s after it closed`
+        : `${Math.round(r.margin)} s`]));
+}
+
 function paintTimeline() {
   const m = currentMatch();
   const s = $("timeline");
@@ -736,9 +768,38 @@ function paintSheets() {
 
   const lim = $("limitsList");
   lim.textContent = "";
-  const hasMap = MODEL.matches.some(m => m.map3);
-  const items = MODEL.notMeasurable.concat(hasMap ? MODEL.mapNotMeasurable : []);
-  items.forEach(t => lim.append(el("li", null, t)));
+  MODEL.notMeasurable.forEach(t => lim.append(el("li", null, t)));
+
+  const pb = MODEL.positionalBlock;
+  const sheet = $("posSheet");
+  if (!pb) { sheet.hidden = true; return; }
+  sheet.hidden = false;
+  $("posNote").textContent =
+    "A rotation is a stretch over 3 m/s covering at least 200 m and ending at least " +
+    "150 m from where it started. Vehicle or foot is a speed threshold, not a sighting " +
+    "of a vehicle. Zone-edge time is time inside the safe circle spent in its outer quarter.";
+  table($("posTable"),
+    [{ label: "match" }, { label: "landed" }, { label: "looted there", num: 1 },
+     { label: "rotations", num: 1 }, { label: "distance", num: 1 },
+     { label: "vehicle", num: 1 }, { label: "on foot", num: 1 },
+     { label: "zone edge", num: 1 }, { label: "outside the blue", num: 1 }],
+    MODEL.matches.filter(m => m.positional).map(m => {
+      const p = m.positional;
+      return [`M${m.n}`,
+        p.landed ? clock(p.landed.t) + " " + (p.landed.place || "") +
+          (p.landed.sure ? "" : " (no descent seen)") : null,
+        p.lootS + " s", p.rotations, p.distance + " m", p.vehicleTime + " s",
+        p.footTime + " s",
+        p.edgeFraction == null ? null : Math.round(p.edgeFraction * 100) + "%",
+        p.outsideBlue == null ? null : p.outsideBlue + " s"];
+    }));
+  $("posSummary").textContent =
+    (pb.medianDelay == null ? "No rotation in these logs started after an announcement. "
+      : `Median delay after a circle is announced: ${pb.medianDelay.toFixed(0)} s over ` +
+        `${pb.delayCount} rotations that started fresh. `) +
+    (pb.vehicleShare == null ? ""
+      : `Vehicle time ${pb.vehicleTime} s of ${pb.movingTime} s moving ` +
+        `(${Math.round(pb.vehicleShare * 100)}%), over ${pb.distance} m of ground.`);
 
   $("foot").textContent =
     `Generated ${MODEL.generated} by bgmi-scrim from ` +
@@ -772,6 +833,7 @@ function selectMatch(i) {
   MAP = buildMap();
   paintRibbon();
   paintTimeline();
+  paintPositioningPhases();
   setTime(0);
 }
 

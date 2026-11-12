@@ -1,4 +1,4 @@
-# TX — synthetic block (5 matches) preparation report
+# TX — Tuesday block A preparation report
 
 Matches in block: 5 (M1=A.events.jsonl; M2=B.events.jsonl; M3=D.events.jsonl; M4=E.events.jsonl; M5=C.events.jsonl). Events read at confidence >= 0.60; 8 unknown-state and 0 low-confidence records of 2393 were excluded.
 
@@ -89,26 +89,87 @@ Examples: M1 01:20 slot 2 knocked, dead 4.3s later; M1 01:38 slot 4 knocked, dea
 
 Deaths with no killer in the log: 5 of 20. Those are excluded from this table rather than assigned.
 
-## 5. Practice focuses
+## 5. Positioning and rotations
 
-1. **Trade discipline on first contact**
-   - Evidence: trade rate 0/17 = 0.00; first untraded knock M1 01:38, slot 4 down to ORCA with no answer inside 15s
-   - Target next block: trade rate >= 0.15 next block
-2. **Avoiding full wipes**
-   - Evidence: 5 of 5 matches ended in a full wipe; earliest example M1 02:06
-   - Target next block: at most 4 full wipes next block
-3. **Saving knocked teammates**
-   - Evidence: 21/22 = 0.95 of knocks conceded turned into a death inside 60s
-   - Target next block: keep that below 0.85 next block
+A rotation is a stretch over 3 m/s covering at least 200 m and ending at least 150 m from where it started. Vehicle versus foot is a speed threshold (90th percentile over 11 m/s), not a sighting of a vehicle. Zone-edge time is time inside the safe circle spent in its outer quarter.
 
-## 6. Not measurable yet
+| match | landed | looted there | rotations | distance moved | vehicle time | on foot | zone-edge time | outside the blue |
+|---|---|---|---|---|---|---|---|---|
+| M1 | 00:19 B2 | 0 s | 7 | 4183 m | 170 s | 148 s | 100% | 380 s |
+| M2 | 00:19 B1 | 0 s | 8 | 5233 m | 305 s | 0 s | not in log | 374 s |
 
-- Positioning, rotations, zone-edge play, vehicle time: needs minimap or positional data; phase 1 reads no map pixels.
+12 of these are the same movement carrying on through the next announcement; they are shown against the circle they were moving towards, and counted once each.
+
+Rotation delay after the circle is announced: median 24 s over 3 rotations (20 s fastest, 32 s slowest).
+
+Vehicle time: 476 s of 623 s moving (76% of time in rotations).
+
+Rotations, by zone phase:
+
+| match | phase | announced | we started | delay | mode | from → to | distance | arrived | margin to close |
+|---|---|---|---|---|---|---|---|---|---|
+| M1 | 1 | 00:00 | no rotation in log | - | - | - | - | - | - |
+| M1 | 2 | 00:46 | 01:05 | 20 s | vehicle | B2 → B1 | 737 m | 01:34 | still moving at the next announcement |
+| M1 | 3 | 01:34 | 01:34 | already moving | vehicle | B1 → B2 | 1235 m | 02:08 | still moving at the next announcement |
+| M1 | 4 | 02:08 | 02:08 | already moving | foot | B2 → B2 | 428 m | 02:56 | still moving at the next announcement |
+| M1 | 5 | 02:56 | 02:56 | already moving | foot | B2 → B2 | 472 m | 03:41 | still moving at the next announcement |
+| M1 | 6 | 03:42 | 03:42 | already moving | vehicle | B2 → B2 | 496 m | 04:40 | still moving at the next announcement |
+| M1 | 7 | 04:40 | 04:40 | already moving | foot | B2 → B3 | 291 m | 05:34 | still moving at the next announcement |
+| M1 | 8 | 05:34 | 05:34 | already moving | vehicle | B3 → B3 | 524 m | 06:24 | 50 s after it closed |
+| M2 | 1 | 00:00 | no rotation in log | - | - | - | - | - | - |
+| M2 | 2 | 00:32 | 00:55 | 24 s | vehicle | B1 → B2 | 362 m | 01:20 | still moving at the next announcement |
+| M2 | 3 | 01:20 | 01:20 | already moving | vehicle | B2 → B2 | 1496 m | 02:08 | still moving at the next announcement |
+| M2 | 4 | 02:08 | 02:08 | already moving | vehicle | B2 → C2 | 1000 m | 02:58 | still moving at the next announcement |
+| M2 | 5 | 02:58 | 02:58 | already moving | vehicle | C2 → C3 | 846 m | 03:42 | still moving at the next announcement |
+| M2 | 6 | 03:42 | 03:42 | already moving | vehicle | C3 → C3 | 369 m | 04:01 | 29 s |
+| M2 | 7 | 04:42 | 04:42 | already moving | vehicle | E3 → E3 | 234 m | 05:16 | still moving at the next announcement |
+| M2 | 8 | 05:16 | 05:16 | already moving | vehicle | E3 → E3 | 413 m | 06:14 | - |
+
+Where we were when each circle was announced:
+
+| match | phase | our place | to the circle edge |
+|---|---|---|---|
+| M1 | 1 | G1 | 879 m outside |
+| M1 | 2 | not tracked | not tracked |
+| M1 | 3 | B1 | 3587 m outside |
+| M1 | 4 | B2 | 3966 m outside |
+| M1 | 5 | B2 | 3940 m outside |
+| M1 | 6 | B2 | 3928 m outside |
+| M1 | 7 | B2 | 3607 m outside |
+| M1 | 8 | B3 | 1160 m outside |
+| M2 | 1 | A1 | 1678 m outside |
+| M2 | 2 | not tracked | not tracked |
+| M2 | 3 | B2 | 3033 m outside |
+| M2 | 4 | B2 | 3056 m outside |
+| M2 | 5 | C2 | 2693 m outside |
+| M2 | 6 | C3 | 2206 m outside |
+| M2 | 7 | D3 | 1481 m outside |
+| M2 | 8 | D3 | 1161 m outside |
+
+Phases we never entered: M1 phase 2; M1 phase 3; M1 phase 4; M1 phase 5; M1 phase 6; M1 phase 7; M1 phase 8; M2 phase 5; M2 phase 6; M2 phase 7; M2 phase 8.
+
+## 6. Practice focuses
+
+1. **Stop arriving on the closing edge**
+   - Evidence: 2 of 2 rotations finished under 30s before the circle closed; worst at M1 06:24 B3, arrived 50s after it closed
+   - Target next block: no rotation finishing under 30s before close
+2. **Less time in the blue**
+   - Evidence: 754s outside the circle across 2 matches; worst M1 with 380s
+   - Target next block: under 188s per match
+3. **Hold ground further inside the circle**
+   - Evidence: median 100% of time inside the circle was spent in its outer quarter; worst M1 at 100%
+   - Target next block: under 70% next block
+
+## 7. Not measurable yet
+
 - Damage dealt or taken, weapons, attachments, utility (grenades, smokes): not shown in the spectator HUD regions phase 1 reads.
 - Who revived whom, revive timings and self-revive: a revive shows only as a slot going back to alive; phase 1 does not emit revive events.
 - Third-party detection, fight-engagement counts, holding versus pushing: needs positions of both teams.
 - Loot quality, landing spot, drop congestion: not in the event log.
 - Individual player names: the panel is read as team tag plus slot number, so per-player identity across matches is slot-based only.
-- Asked for: "rotation timings" — the phase-1 event log has no field that supports it.
-- Asked for: "utility usage before zone 4" — the phase-1 event log has no field that supports it.
+- Elevation, buildings, and whether a team is inside or outside: the map stream is a flat top-down view.
+- Which player of a squad is which while their dots overlap: at the map's scale team-mates standing together are one dot, so positions are per team with players named only where a label was legible.
+- Vehicle type and whether a team is in one at all: only speed is measured, and the foot/vehicle split is a speed threshold.
+- Asked for: "rotation timings" — no supplied log has a field that supports it.
+- Asked for: "utility usage before zone 4" — no supplied log has a field that supports it.
 

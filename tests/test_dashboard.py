@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from bgmi_scrim.dashboard import build_model, render_html
 
 
@@ -101,3 +103,75 @@ def test_rendered_page_is_self_contained(tmp_path):
     assert '"team":"TX"' in html
     assert "<script src=" not in html          # no external javascript
     assert html.count("<html") == 1
+
+
+# ---------------- what is and is not measurable ----------------
+def test_the_limits_list_shrinks_when_a_map_stream_is_supplied():
+    from bgmi_scrim.report import not_measurable
+    without = " ".join(not_measurable(False))
+    with_map = " ".join(not_measurable(True))
+    assert "needs a map stream" in without
+    assert "needs a map stream" not in with_map
+    assert "flat top-down view" in with_map          # what a map still cannot answer
+    assert "Damage dealt or taken" in without and "Damage dealt or taken" in with_map
+
+
+def test_positional_facts_measure_rotations_edge_play_and_vehicle_time(tmp_path):
+    from bgmi_scrim.positional import positional_match
+    mev = [
+        {"type": "zone_phase", "t": 0.0, "phase": 1, "cx_m": 4000, "cy_m": 4000,
+         "r_m": 3000, "closed_t": 60.0, "place": "E5"},
+        {"type": "zone_phase", "t": 60.0, "phase": 2, "cx_m": 3500, "cy_m": 3500,
+         "r_m": 1500, "closed_t": 150.0, "place": "D4"},
+        {"type": "landing", "t": 20.0, "team": "TX", "unit": "team", "x_m": 1000,
+         "y_m": 1000, "place": "B2", "confidence": 0.9},
+        {"type": "loot", "t": 25.0, "t_end": 70.0, "team": "TX", "unit": "team",
+         "duration_s": 45.0, "confidence": 0.9},
+        {"type": "rotation", "t": 80.0, "t_end": 140.0, "team": "TX", "unit": "team",
+         "duration_s": 60.0, "from": "B2", "to": "D4", "distance_m": 900,
+         "mode": "vehicle", "phase": 2, "after_announce_s": 20.0,
+         "before_close_s": 10.0, "confidence": 0.9},
+        {"type": "rotation", "t": 150.0, "t_end": 180.0, "team": "TX", "unit": "team",
+         "duration_s": 30.0, "from": "D4", "to": "D4", "distance_m": 250,
+         "mode": "foot", "phase": 2, "after_announce_s": 90.0, "confidence": 0.9},
+        {"type": "zone_summary", "t": 200.0, "team": "TX", "unit": "team",
+         "time_outside_blue_s": 42.0, "edge_time_fraction": 0.5,
+         "tracked_from_s": 0.0, "tracked_to_s": 200.0, "confidence": 0.9},
+        {"type": "zone_entry", "t": 0.0, "team": "TX", "unit": "team", "phase": 2,
+         "state": "never_entered", "confidence": 0.9},
+    ]
+    tracks = [{"type": "map_info", "map": "ERANGEL", "world_size_m": 8000, "our_team": "TX"}]
+    for i in range(6):
+        tracks.append({"type": "sample", "t": i * 20.0, "track": 1, "team": "TX",
+                       "x_m": 1000 + i * 400, "y_m": 1000 + i * 400, "confidence": 0.9})
+    pm = positional_match(1, _write(tmp_path, "t.jsonl", tracks),
+                          _write(tmp_path, "me.jsonl", mev), "TX")
+    assert pm.landing["place"] == "B2" and pm.loot_s == 45.0
+    assert pm.vehicle_time_s == 60.0 and pm.foot_time_s == 30.0
+    assert pm.vehicle_share == pytest.approx(60 / 90)
+    assert pm.rotation_distance_m == 1150
+    assert pm.edge_fraction == 0.5 and pm.time_outside_blue_s == 42.0
+    assert [p["phase"] for p in pm.positions] == [1, 2]
+    assert pm.positions[0]["place"] == "B2"
+    assert any(e.get("state") == "never_entered" for e in pm.zone_entries)
+
+
+def test_report_measures_positioning_only_when_the_map_logs_are_there(tmp_path):
+    from bgmi_scrim.report import build_report
+    ev = _match(tmp_path)
+    plain = build_report([ev], team="TX")
+    assert "needs a map stream" in plain
+    assert "No map stream was supplied" in plain
+    mev = [{"type": "zone_phase", "t": 0.0, "phase": 1, "cx_m": 4000, "cy_m": 4000,
+            "r_m": 3000, "closed_t": 60.0, "place": "E5"},
+           {"type": "landing", "t": 20.0, "team": "TX", "unit": "team", "x_m": 1000,
+            "y_m": 1000, "place": "B2", "confidence": 0.9},
+           {"type": "rotation", "t": 30.0, "t_end": 50.0, "team": "TX", "unit": "team",
+            "duration_s": 20.0, "from": "B2", "to": "C3", "distance_m": 400,
+            "mode": "foot", "phase": 1, "after_announce_s": 30.0,
+            "before_close_s": 10.0, "confidence": 0.9}]
+    rich = build_report([ev], team="TX", map_events_paths=[_write(tmp_path, "m.jsonl", mev)])
+    assert "## 5. Positioning and rotations" in rich
+    assert "needs a map stream" not in rich
+    assert "vehicle time" in rich and "zone-edge time" in rich
+    assert "B2 → C3" in rich

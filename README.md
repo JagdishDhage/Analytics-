@@ -260,23 +260,37 @@ header states the threshold every figure was read at.
 
 ```bash
 python -m bgmi_scrim report --events m1.events.jsonl m2.events.jsonl m3.events.jsonl \
+    --tracks m1.tracks.jsonl m2.tracks.jsonl \
+    --map-events m1.mapevents.jsonl m2.mapevents.jsonl \
     --team TX --block "Tuesday block A" --out prep.md \
-    --asked-for "rotation timings" "utility usage"
+    --asked-for "utility usage"
 ```
+
+`--tracks` and `--map-events` are optional and are matched to `--events` by
+position. With phase-1 events alone the report covers results, survival, fights
+and opponents, and lists positioning as unmeasurable. Add the phase-3 map logs
+and it also measures **positioning, rotations, zone-edge play and vehicle time** —
+and that line disappears from "not measurable yet", because it no longer applies.
 
 Sections: result (placement points, kill points, total, per match and cumulative,
 against the block average), survival, fights (kills/deaths per phase, trade rate,
 knock conversion, knocks conceded then lost), opponents (who took our lives, in
-which phase), three ranked practice focuses each with its single strongest piece
-of log evidence and a measurable target, and **not measurable yet**.
+which phase), **positioning and rotations** when the map logs are supplied
+(landing, loot time, rotation per phase with its delay and margin, vehicle time,
+zone-edge share, time outside the blue, and where the squad was at each
+announcement), three ranked practice focuses — positional ones rank alongside
+the fight ones on the same evidence — and **not measurable yet**.
 
 An example built from the five measured runs is in
 [`docs/example_report.md`](docs/example_report.md).
 
 Rules the report keeps:
 
-* Nothing is derived that the event log does not contain. Metrics needing minimap
-  or positional data are listed under "not measurable yet", never estimated.
+* Nothing is derived that the supplied logs do not contain. The "not measurable
+  yet" list is computed from which logs were given: without a map stream it says
+  positioning needs one; with a map stream it says instead what a flat top-down
+  view still cannot answer (elevation, who is who inside a stacked squad,
+  whether a vehicle is really a vehicle).
 * Every figure cites match number and video timestamp (`M2 08:14`).
 * Records with `state: unknown` or confidence below the threshold are excluded,
   and the exclusion count is printed at the top.

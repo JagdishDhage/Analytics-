@@ -14,7 +14,7 @@ from . import sampler
 from .map_dots import ColourBook, Dot, assign_teams_by_colour, detect_dots, read_dot_labels
 from .map_movement import (DEFAULTS, Phase, Sample, Segment, ZoneSample,
                            edge_fraction, landing, phases, rotation_start_after_announce,
-                           segments, squad_spread, time_outside, zone_entry)
+                           segments, split_at, squad_spread, time_outside, zone_entry)
 from .map_profile import MapProfile
 from .map_track import Detection, Track, Tracker
 from .map_world import WorldMap, spread_m
@@ -358,7 +358,18 @@ def _unit_events(who: Dict[str, Any], samples: Sequence[Sample], world: WorldMap
             rec["note"] = "stream starts after the drop; this is the first tracked position"
         out.append(rec)
     ground = [s for s in samples if land is None or s.t >= land.t]
-    for seg in segments(ground, cfg):
+    announces = [p.announced_t for p in ph_list]
+    raw = segments(ground, cfg)
+    parts: List[Segment] = []
+    for seg in raw:
+        if seg.kind == "rotation":
+            pieces = split_at(seg, ground, announces, cfg)
+            for i, piece in enumerate(pieces):
+                piece.continued = i > 0
+            parts.extend(pieces)
+        else:
+            parts.append(seg)
+    for seg in parts:
         rec: Dict[str, Any] = {"type": seg.kind, "t": round(seg.t0, 2),
                                "t_end": round(seg.t1, 2), **who,
                                "duration_s": round(seg.duration, 1),
@@ -370,14 +381,22 @@ def _unit_events(who: Dict[str, Any], samples: Sequence[Sample], world: WorldMap
                                "confidence": round(conf, 3)}
         if seg.kind == "rotation":
             rec["mode"] = seg.mode
+            if getattr(seg, "continued", False):
+                rec["continued"] = True
             ph = None
             for p in ph_list:
                 if p.announced_t <= seg.t0:
                     ph = p
             if ph is not None:
                 rec["phase"] = ph.number
-                rec["after_announce_s"] = round(seg.t0 - ph.announced_t, 1)
-                if ph.closed_t is not None:
+                if not getattr(seg, "continued", False):
+                    rec["after_announce_s"] = round(seg.t0 - ph.announced_t, 1)
+                nxt = next((p for p in ph_list if p.announced_t > ph.announced_t), None)
+                if nxt is not None and abs(seg.t1 - nxt.announced_t) <= 1.5:
+                    # the movement did not end here, the next circle did: this
+                    # part was cut at the announcement, so there is no arrival
+                    rec["ran_into_next_phase"] = True
+                elif ph.closed_t is not None:
                     margin = ph.closed_t - seg.t1
                     rec["before_close_s"] = round(margin, 1)
                     if margin < 0:

@@ -257,3 +257,19 @@ def test_a_tracking_hole_is_not_movement():
     segs = segments(a + b, DEFAULTS)
     assert all(x.t1 - x.t0 < 60 for x in segs), [(x.kind, x.t0, x.t1) for x in segs]
     assert all(x.distance_m < 1000 for x in segs)
+
+
+def test_a_rotation_through_two_circles_is_split_at_the_announcements():
+    """A squad that keeps driving has made the rotation for each circle, and a
+    coach reads them per phase."""
+    from bgmi_scrim.map_movement import split_at
+    s = [Sample(t * 1.0, 1000 + t * 14.0, 2000.0) for t in range(60)]
+    seg = segments(s, DEFAULTS)[0]
+    assert seg.kind == "rotation" and seg.t1 - seg.t0 > 50
+    parts = split_at(seg, s, [20.0, 40.0], DEFAULTS)
+    assert len(parts) == 3
+    assert [round(p.t0) for p in parts] == [0, 20, 40]
+    assert sum(p.distance_m for p in parts) == pytest.approx(seg.distance_m, rel=0.05)
+    assert all(p.mode == "vehicle" for p in parts)
+    # a movement inside one phase is left alone
+    assert len(split_at(seg, s, [200.0], DEFAULTS)) == 1
