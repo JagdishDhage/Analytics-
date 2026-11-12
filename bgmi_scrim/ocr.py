@@ -67,17 +67,26 @@ def reset_ocr_failures() -> None:
     _OCR_FAILURES = 0
 
 
-def _tess(img: np.ndarray, psm: int, whitelist: str) -> Tuple[str, float]:
+def _tess(img: np.ndarray, psm: int, whitelist: str,
+          engine_whitelist: bool = False) -> Tuple[str, float]:
     global _OCR_FAILURES
     if not tesseract_available():
         raise OcrUnavailable("tesseract binary not found")
-    # tessedit_char_whitelist is not honoured by the LSTM engine (--oem 1).
-    # Worse, passing it makes tesseract return one run-together token with a
-    # reported confidence of 0: both the word boundaries and the confidence
-    # are lost. The same row read without it comes back as
-    # "MDYxDELTA" 56, "FINISHED" 93, "XSPxBRAVO" 90. So the alphabet is
-    # constrained here instead, after the engine has had its say.
+    # Passing tessedit_char_whitelist to the LSTM engine (--oem 1) costs the
+    # word boundaries and the confidence: the same kill-feed row reads as
+    # "MDYXDELTAFINISHEDXSPXBRAVO" conf 0 with it, and as "MDYxDELTA" 56,
+    # "FINISHED" 93, "XSPxBRAVO" 90 without. Text ROIs therefore constrain
+    # the alphabet in Python, below, after the engine has had its say.
+    #
+    # Numerals are the opposite case and keep the engine-side whitelist.
+    # Measured on gate run A: filtering digits in Python instead took
+    # players_alive from 0.99 to 0.7667, with 70 confidently wrong reads,
+    # because the engine offers a letter for a digit and the filter drops it,
+    # turning "44" into "4". read_numeral scores its own per-digit crops and
+    # does not depend on the confidence this option flattens.
     cfg = f"--psm {psm} --oem 1"
+    if engine_whitelist:
+        cfg += f" -c tessedit_char_whitelist={whitelist}"
     try:
         data = pytesseract.image_to_data(_pad(img), config=cfg, output_type=Output.DICT)
     except OcrUnavailable:
@@ -214,7 +223,7 @@ def _read_numeral_one(binary: np.ndarray, max_digits: int = 3) -> Tuple[Optional
     component count is capped below any sane threshold, so it surfaces as
     "unknown" rather than as a confident wrong number.
     """
-    whole_txt, whole_conf = _tess(binary, 7, DIGITS)
+    whole_txt, whole_conf = _tess(binary, 7, DIGITS, engine_whitelist=True)
     whole = re.sub(r"\D", "", whole_txt)[:max_digits]
 
     crops = segment_digits(binary, max_boxes=max_digits)
@@ -227,7 +236,7 @@ def _read_numeral_one(binary: np.ndarray, max_digits: int = 3) -> Tuple[Optional
             seg_complete = False
             continue
         crop = cv2.resize(crop, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
-        t, c = _tess(crop, 10, DIGITS)
+        t, c = _tess(crop, 10, DIGITS, engine_whitelist=True)
         t = re.sub(r"\D", "", t)[:1]
         if t:
             per_digit.append(t)
@@ -239,7 +248,7 @@ def _read_numeral_one(binary: np.ndarray, max_digits: int = 3) -> Tuple[Optional
     seg = "".join(per_digit)
     seg_conf = float(np.mean(per_conf)) if per_conf else 0.0
     if max_digits == 1 and not seg:
-        t, c = _tess(binary, 10, DIGITS)
+        t, c = _tess(binary, 10, DIGITS, engine_whitelist=True)
         t = re.sub(r"\D", "", t)[:1]
         if t:
             seg, seg_conf, nseg, seg_complete = t, c, max(nseg, 1), True
