@@ -132,6 +132,8 @@ class ZoneStabiliser:
 
     keep: int = 5
     confirm: int = 2
+    #: the zone only ever shrinks inside a match, so a bigger fit is a wrong fit
+    max_growth: float = 1.15
     history: Dict[str, List[Circle]] = field(default_factory=dict)
     pending: Dict[str, List[Circle]] = field(default_factory=dict)
     rejected: int = 0
@@ -144,6 +146,9 @@ class ZoneStabiliser:
             hist.append(c)
             return c
         med = self._median(hist)
+        if c.r > med.r * self.max_growth:
+            self.rejected += 1
+            return None
         move = math.dist((c.cx, c.cy), (med.cx, med.cy))
         dr = abs(c.r - med.r)
         tol_c = max(80.0, 0.25 * med.r)

@@ -292,3 +292,23 @@ def test_a_tiny_final_circle_is_still_fitted():
     c = read_circles(frame, prof, world)["safe"]
     assert c is not None, "the final circle was rejected for holding few points"
     assert abs(c.r - 8 * world.metres_per_pixel()) < 40
+
+
+def test_a_circle_that_grows_is_not_a_new_phase():
+    """A fit that jumped to a 2822 m circle between the 115 m and 66 m ones
+    invented a ninth phase in a match that had eight."""
+    z = [ZoneSample(t, "safe", 3860, 4938, 115) for t in (0, 10, 20)]
+    z += [ZoneSample(t, "safe", 5795, 2836, 2822) for t in (30, 32)]   # a bad fit, twice
+    z += [ZoneSample(t, "safe", 3869, 4938, 66) for t in (40, 42, 44)]
+    got = phases(z)
+    assert [round(p.r) for p in got] == [115, 66]
+
+
+def test_the_stabiliser_rejects_a_fit_that_grew():
+    from bgmi_scrim.map_zones import Circle, ZoneStabiliser
+    st = ZoneStabiliser(confirm=2)
+    for _ in range(3):
+        st.accept("safe", Circle(3860, 4938, 115, 0.9))
+    assert st.accept("safe", Circle(5795, 2836, 2822, 0.9)) is None
+    assert st.accept("safe", Circle(5795, 2836, 2822, 0.9)) is None   # even twice
+    assert st.accept("safe", Circle(3869, 4938, 66, 0.9)) is not None

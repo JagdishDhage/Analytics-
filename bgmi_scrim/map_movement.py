@@ -244,6 +244,11 @@ def phases(zone: Sequence[ZoneSample], min_shrink: float = 0.08,
             out.append(Phase(1, z.t, z.cx, z.cy, z.r))
             continue
         last = out[-1]
+        if z.r > last.r * 1.05:
+            # A safe circle never grows. A fit that says otherwise has locked
+            # onto something else, and believing it invents a phase.
+            pending = []
+            continue
         moved = math.dist((z.cx, z.cy), (last.cx, last.cy)) > 0.25 * max(last.r, 1.0)
         shrank = z.r < last.r * (1.0 - min_shrink)
         if not (shrank or moved):
