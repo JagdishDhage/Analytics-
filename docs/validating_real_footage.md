@@ -107,6 +107,7 @@ labels.
 | every counter reads `unknown` | the box is on the label, not the digits, or the picture is letterboxed | tighten the box in the preview; run with `--content-box auto` |
 | counters read, nothing else | the panel proposal missed | check the orange and green boxes in the preview; set `row_pitch` from two rows' pixel distance |
 | team tags read as `ROW3` | the roster does not contain that tag, or the tag box clips it | add the tag to `team_tags`; widen `tag_w` |
+| one team has events that are not its own | a row claimed a tag on a weak read | raise `team_panel.tag_min_score` towards 0.72; measured, that takes a heavily compressed capture from 0.944 precision to 0.996, and costs a clean one 0.013 |
 | knocks found, kills missing | `slot_states` colour bands do not match the overlay's dead colour | sample the HSV of a dead pip and widen that band |
 | phantom events in the feed | the feed box overlaps another HUD element | narrow `kill_feed.box`; raise `feed_sightings` to 3 |
 | map: no dots | `sat_min`/`val_min` too high for a desaturated overlay, or `map_area` wrong | check the preview; lower the thresholds |

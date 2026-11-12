@@ -1,6 +1,6 @@
 # Real-capture conditions
 
-Measured at commit `dc82478`. Every earlier number in this repository came
+Measured at commit `663b6ae`. Every earlier number in this repository came
 from footage rendered exactly as the profile expected it. A real VOD is
 compressed, often rescaled, and often letterboxed, so these runs take the same
 clips and the same labels through an encoder first. They are still synthetic
@@ -23,7 +23,7 @@ the bars; without it a profile reads the wrong pixels and reports nothing.
 | capture | events | precision | recall | dup | phantom | miss | teams-alive | players-alive |
 |---|---|---|---|---|---|---|---|---|
 | clean 1080p (reference) | 1070 | 1.0000 | 1.0000 | 0 | 0 | 0 | 0.9995 | 0.9936 |
-| heavy compression, crf 34 | 223 | 0.9955 | 0.9910 | 0 | 1 | 2 | 0.9667 | 0.9400 |
+| heavy compression, crf 34 | 223 | 0.9563 | 0.9821 | 0 | 10 | 4 | 0.9667 | 0.9400 |
 | rescaled to 1600x900 | 223 | 1.0000 | 1.0000 | 0 | 0 | 0 | 0.9900 | 0.9967 |
 | rescaled to 1280x720 | 223 | 0.9955 | 1.0000 | 0 | 1 | 0 | 0.9900 | 0.9767 |
 | letterboxed into 1920x1080 | 223 | 1.0000 | 0.9955 | 0 | 0 | 1 | 1.0000 | 0.9967 |
@@ -67,15 +67,31 @@ could not actually identify, and nothing downstream questioned it.
    pip went down even when it cannot read the tag, and that slot number was
    being thrown away. A feed line may now name an anonymous panel event only
    when it is about the same slot.
-6. **A garbled tag claimed a team on a 0.6 similarity.** One row read badly
-   enough to match TX weakly, took the tag, and filed ten of another team's
-   events under it. The panel's tag match now needs 0.72, and a row that
-   cannot clear it stays unnamed, where its events are named from the feed by
-   slot or dropped. Compression precision went from 0.9440 to 0.9955.
+6. **A garbled tag can claim a team on a weak similarity.** One row on the
+   compressed capture matched TX at 0.6 and took the tag, filing ten of
+   another team's events under it. Raising the panel's `tag_min_score` to 0.72
+   takes that capture from 0.9440 precision to 0.9955 — and costs the clean
+   capture, which falls from 1.0000 to 0.9867 because a row that reads
+   perfectly well is refused. One threshold cannot serve both, so the shipped
+   default stays at 0.60, which is right for a capture you control, and the
+   knob is documented for sources that are heavily compressed.
 7. **A circle that grew was believed because it repeated.** A fit jumped to
    2822 m between the real 115 m and 66 m circles and invented a ninth phase.
    The zone only shrinks inside a match; both the stabiliser and the phase
    detector enforce that now.
+
+## A knob worth knowing about
+
+`team_panel.tag_min_score` is how sure the panel has to be of a team tag before
+a row claims it. Measured on the same clip at both settings:
+
+| capture | 0.60 (default) | 0.72 |
+|---|---|---|
+| clean 1080p | precision 1.0000, recall 1.0000 | precision 0.9867, recall 0.9955 |
+| heavy compression | precision 0.9563, recall 0.9821 | precision 0.9955, recall 0.9910 |
+
+Raise it for a source that has been through a hard encoder; leave it alone for
+a capture you control.
 
 ## What these runs still do not test
 
