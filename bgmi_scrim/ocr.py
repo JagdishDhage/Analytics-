@@ -327,6 +327,17 @@ def read_text(img, whitelist: str = ALNUM, psm: int = 7,
         txt = txt.upper().strip()
         if txt and len(txt) > len(best[0]):
             best = (txt, 0.0)
+    if best[0]:
+        return best
+    # Still nothing. A 1080p profile scaled to a 720p capture leaves a tag
+    # ROI about two thirds the height the thresholds were chosen for, and at
+    # that size this row reads as nothing either way. Give it more pixels.
+    for b in imgs:
+        big = cv2.resize(b, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+        txt, _ = _tess(big, psm, whitelist, engine_whitelist=True)
+        txt = txt.upper().strip()
+        if txt and len(txt) > len(best[0]):
+            best = (txt, 0.0)
     return best
 
 
