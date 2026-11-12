@@ -1,7 +1,7 @@
 """The scenario input: a feed that names players, with real tags ending in L."""
 import sys; sys.path.insert(0, "/home/user/Analytics-")
 from bgmi_scrim.profile import Profile
-from bgmi_scrim.killfeed import _actor, parse_feed_line
+from bgmi_scrim.killfeed import _actor, _actor_by_name, parse_feed_line
 
 PROF = Profile.from_dict({
     "name": "t", "resolution": [1920, 1080],
@@ -33,3 +33,33 @@ def test_unknown_player_gives_no_slot_rather_than_a_guess():
 def test_ocr_lost_spaces_still_parse():
     e = parse_feed_line("SOULXVIPERFINISHEDGODLXNOVO", 0.5, PROF)
     assert (e.kind, e.victim_team, e.victim_slot) == ("kill", "GODL", 3)
+
+
+SHORT_VS_LONG = Profile.from_dict({
+    "name": "t2", "resolution": [1920, 1080],
+    "team_tags": ["OR", "ORCA", "BLIND", "TX", "IQOO", "GB"],
+    "roster": {t: ["ALFA", "BRAVO", "CHARL", "DELTA"]
+               for t in ["OR", "ORCA", "BLIND", "TX", "IQOO", "GB"]},
+    "rois": {},
+})
+
+
+def test_a_short_tag_does_not_absorb_a_longer_one():
+    # a sliding window finds "DxBRAVO" inside BLINDxBRAVO and scores ORxBRAVO
+    # at 0.80; whole-token matching scores it 0.63 and keeps BLIND
+    for label, team in (("BLINDXBRAVO", "BLIND"), ("ORXBRAVO", "OR"),
+                        ("ORCAXBRAVO", "ORCA"), ("IQOOXDELTA", "IQOO"),
+                        ("TXXDELTA", "TX")):
+        got = _actor_by_name(label, SHORT_VS_LONG, "first")
+        assert got[0] == team, f"{label} read as {got[0]}"
+
+
+def test_killer_and_victim_both_keep_their_own_tag():
+    e = parse_feed_line("BLINDXBRAVO KNOCKED OUT GBXBRAVO", 0.85, SHORT_VS_LONG)
+    assert (e.killer_team, e.killer_slot) == ("BLIND", 2)
+    assert (e.victim_team, e.victim_slot) == ("GB", 2)
+
+
+def test_spaceless_fallback_still_resolves():
+    e = parse_feed_line("ORCAXBRAVOFINISHEDBLINDXBRAVO", 0.85, SHORT_VS_LONG)
+    assert (e.killer_team, e.victim_team) == ("ORCA", "BLIND")

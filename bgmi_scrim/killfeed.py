@@ -48,22 +48,52 @@ def _actor_by_name(text: str, prof: Profile, prefer: str
     t = _norm(text)
     if not prof.roster or len(t) < 3:
         return None, None, 0.0
-    best = (0.0, None, None, -1)
-    for team, players in prof.roster.items():
-        for i, player in enumerate(players):
-            cand = _norm(f"{team}X{player}")
-            if not cand:
+
+    cands = [(_norm(f"{team}X{player}"), team, i + 1)
+             for team, players in prof.roster.items()
+             for i, player in enumerate(players)]
+    cands = [c for c in cands if c[0]]
+    if not cands:
+        return None, None, 0.0
+
+    def best_of(hay: str, whole: bool) -> Tuple[float, Optional[str], Optional[int]]:
+        best = (0.0, None, None)
+        for cand, team, slot in cands:
+            if whole:
+                score = difflib.SequenceMatcher(None, hay, cand).ratio()
+                if score > best[0]:
+                    best = (score, team, slot)
                 continue
-            # find the best window of the text that looks like this label
-            for start in range(0, max(1, len(t) - len(cand) + 2)):
-                window = t[start:start + len(cand)]
+            for start in range(0, max(1, len(hay) - len(cand) + 2)):
+                window = hay[start:start + len(cand)]
                 if len(window) < 3:
                     continue
                 score = difflib.SequenceMatcher(None, window, cand).ratio()
                 if score > best[0]:
-                    best = (score, team, i + 1, start)
-    score, team, slot, start = best
-    if team is None or score < 0.75:
+                    best = (score, team, slot)
+        return best
+
+    # A whole token first. The feed writes one label per word, and comparing
+    # whole words is what keeps a short tag out of a long one: against the
+    # token BLINDxBRAVO the label ORxBRAVO scores 0.63 and is refused, while
+    # a sliding window finds "DxBRAVO" inside it and scores 0.80, which is
+    # how BLIND#2 was being reported as OR#2. A tag absorbed this way is a
+    # wrong name on a real team's event, so it has to lose on length.
+    tokens = [_norm(tok) for tok in re.split(r"\s+", (text or "").strip()) if _norm(tok)]
+    best = (0.0, None, None)
+    for tok in tokens:
+        if len(tok) < 3:
+            continue
+        cand = best_of(tok, whole=True)
+        if cand[0] > best[0]:
+            best = cand
+    if best[1] is not None and best[0] >= 0.75:
+        return best[1], best[2], best[0]
+
+    # Only when no word matches on its own -- OCR that lost the spaces --
+    # fall back to scanning, and ask for more before believing it.
+    score, team, slot = best_of(t, whole=False)
+    if team is None or score < 0.85:
         return None, None, score
     return team, slot, score
 
