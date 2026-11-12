@@ -71,7 +71,13 @@ def _tess(img: np.ndarray, psm: int, whitelist: str) -> Tuple[str, float]:
     global _OCR_FAILURES
     if not tesseract_available():
         raise OcrUnavailable("tesseract binary not found")
-    cfg = f"--psm {psm} --oem 1 -c tessedit_char_whitelist={whitelist}"
+    # tessedit_char_whitelist is not honoured by the LSTM engine (--oem 1).
+    # Worse, passing it makes tesseract return one run-together token with a
+    # reported confidence of 0: both the word boundaries and the confidence
+    # are lost. The same row read without it comes back as
+    # "MDYxDELTA" 56, "FINISHED" 93, "XSPxBRAVO" 90. So the alphabet is
+    # constrained here instead, after the engine has had its say.
+    cfg = f"--psm {psm} --oem 1"
     try:
         data = pytesseract.image_to_data(_pad(img), config=cfg, output_type=Output.DICT)
     except OcrUnavailable:
@@ -79,10 +85,13 @@ def _tess(img: np.ndarray, psm: int, whitelist: str) -> Tuple[str, float]:
     except Exception:  # engine abort, bad exit status, unparsable TSV
         _OCR_FAILURES += 1
         return "", 0.0
+    allowed = set(whitelist)
     chunks: List[str] = []
     confs: List[float] = []
     for txt, conf in zip(data.get("text", []), data.get("conf", [])):
-        txt = (txt or "").strip()
+        # upper-case before filtering: the separator in "MDYxDELTA" is a
+        # lowercase x, and dropping it would weld the tag to the player name
+        txt = "".join(c for c in (txt or "").strip().upper() if c in allowed)
         try:
             c = float(conf)
         except (TypeError, ValueError):
