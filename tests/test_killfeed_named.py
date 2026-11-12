@@ -101,6 +101,21 @@ def test_an_unreadable_text_roi_falls_back_to_the_constrained_engine():
     from bgmi_scrim.ocr import read_text
     img = np.full((40, 80), 255, np.uint8)
     cv2.putText(img, "TX", (6, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, 0, 2, cv2.LINE_AA)
-    txt, _ = read_text(img)
+    txt, _ = read_text(img, retry_constrained=True)
     assert txt, "a legible ROI must not read as nothing"
     assert txt.startswith("T")
+
+
+def test_the_constrained_retry_is_not_used_on_feed_rows():
+    """A feed row that reads as nothing usually is nothing: the feed is
+    shorter than its slot count. Squeezing characters out of an empty row
+    turns it into an event."""
+    import numpy as np
+    from bgmi_scrim.ocr import read_text
+    blankish = np.full((40, 300), 255, np.uint8)
+    blankish[20:22, 10:14] = 0          # a speck, not text
+    assert read_text(blankish)[0] == "" or len(read_text(blankish)[0]) <= 2
+    # and the default must not be the retrying one
+    import inspect
+    sig = inspect.signature(read_text)
+    assert sig.parameters["retry_constrained"].default is False

@@ -277,7 +277,8 @@ def _read_numeral_one(binary: np.ndarray, max_digits: int = 3) -> Tuple[Optional
 
 
 def read_text(img, whitelist: str = ALNUM, psm: int = 7,
-              accept_conf: float = 0.85) -> Tuple[str, float]:
+              accept_conf: float = 0.85,
+              retry_constrained: bool = False) -> Tuple[str, float]:
     """Read a text ROI from one or more binarisations, keeping the best read.
 
     The longest read wins, with confidence breaking ties. Ranking by
@@ -301,15 +302,21 @@ def read_text(img, whitelist: str = ALNUM, psm: int = 7,
             best = (txt, conf)
         if conf >= accept_conf and len(txt) >= len(best[0]):
             break
-    if best[0]:
+    if best[0] or not retry_constrained:
         return best
-    # Nothing readable. On a short, highlighted ROI -- our own team's row in
-    # the panel is drawn differently from the rest -- the free engine offers
-    # glyphs outside the alphabet and the filter above leaves an empty
-    # string, so TX's row went unnamed and its alive count with it. Constrain
-    # the engine and ask once more. The confidence it reports under the
-    # whitelist is flat, which costs nothing here: the caller scores a tag by
-    # how well it matches the roster, and an empty read scores nothing at all.
+    # Nothing readable, and the caller says this ROI holds something. On a
+    # short, highlighted ROI -- our own team's row in the panel is drawn
+    # differently from the rest -- the free engine offers glyphs outside the
+    # alphabet and the filter above leaves an empty string, so TX's row went
+    # unnamed and its alive count with it. Constrain the engine and ask once
+    # more. The confidence it reports under the whitelist is flat, which
+    # costs nothing here: the caller scores a tag by how well it matches the
+    # roster, and an empty read scores nothing at all.
+    #
+    # Only a caller that knows the region must contain text may ask for this.
+    # A kill-feed row that reads as nothing usually IS nothing -- the feed is
+    # shorter than its five slots -- and squeezing characters out of it turns
+    # empty rows into events: on the feed-only clip it cost 4 phantoms.
     for b in imgs:
         txt, _ = _tess(b, psm, whitelist, engine_whitelist=True)
         txt = txt.upper().strip()
