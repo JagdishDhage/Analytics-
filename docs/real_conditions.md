@@ -1,6 +1,6 @@
 # Real-capture conditions
 
-Measured at commit `efb2996`. Every earlier number in this repository came
+Measured at commit `d12b67c`. Every earlier number in this repository came
 from footage rendered exactly as the profile expected it. A real VOD is
 compressed, often rescaled, and often letterboxed, so these runs take the same
 clips and the same labels through an encoder first. They are still synthetic
@@ -23,19 +23,19 @@ the bars; without it a profile reads the wrong pixels and reports nothing.
 | capture | events | precision | recall | dup | phantom | miss | teams-alive | players-alive |
 |---|---|---|---|---|---|---|---|---|
 | clean 1080p (reference) | 1070 | 1.0000 | 1.0000 | 0 | 0 | 0 | 0.9995 | 0.9936 |
-| heavy compression, crf 34 | 223 | 0.9181 | 0.9552 | 0 | 19 | 10 | 0.9667 | 0.9400 |
+| heavy compression, crf 34 | 223 | 0.9440 | 0.9821 | 3 | 10 | 4 | 0.9667 | 0.9400 |
 | rescaled to 1600x900 | 223 | 1.0000 | 1.0000 | 0 | 0 | 0 | 0.9900 | 0.9967 |
-| rescaled to 1280x720 | 223 | 0.9612 | 1.0000 | 0 | 9 | 0 | 0.9900 | 0.9767 |
-| letterboxed into 1920x1080 | not measured | | | | | | | |
+| rescaled to 1280x720 | 223 | 1.0000 | 1.0000 | 0 | 0 | 0 | 0.9900 | 0.9767 |
+| letterboxed into 1920x1080 | 223 | 1.0000 | 0.9955 | 0 | 0 | 1 | 1.0000 | 0.9967 |
 
 ## Phase 3, the map stream
 
 | capture | position median | p90 | team identity | dot coverage | zone phases |
 |---|---|---|---|---|---|
 | heavy compression, crf 34 | 7.72 m | 20.87 m | 0.9702 | 0.88 | 8 → 8 |
-| rescaled to 1280x720 | 11.74 m | 17.27 m | 0.8925 | 0.8818 | 8 → 6 |
+| rescaled to 1280x720 | 11.81 m | 17.38 m | 0.8578 | 0.8818 | 8 → 8 |
 | letterboxed into 1920x1080 | 8.55 m | 15.39 m | 0.9798 | 0.8733 | 8 → 8 |
-| clean 1080p (regression check) | 7.42 m | 29.45 m | 0.9849 | 0.8654 | 8 → 9 |
+| clean 1080p (regression check) | 7.39 m | 25.94 m | 0.9666 | 0.8654 | 8 → 8 |
 
 ## What broke, and why
 
