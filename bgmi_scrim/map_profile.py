@@ -182,5 +182,16 @@ class MapProfile:
         for k, s in (("dx", sx), ("dy", sy), ("w", sx), ("h", sy)):
             out.label[k] = float(self.label[k]) * s
         out.dots["dedup_px"] = float(self.dots.get("dedup_px", 3.0)) * sx
+        # A circle band's thresholds are in pixels, and a ring at 720p holds
+        # about two thirds of the points it holds at 1080p: leaving them fixed
+        # makes the fit fail on smaller captures and lose whole zone phases.
+        for name, c in out.circles.items():
+            base = self.circles[name]
+            out.circles[name] = CircleBand(
+                name, base.hsv_lo, base.hsv_hi, base.min_radius_frac,
+                base.max_radius_frac,
+                max(40, int(round(base.min_points * sx))),
+                base.large_components_only,
+                max(2.0, round(base.tol_px * sx, 2)))
         out.resolution = (width, height)
         return out
