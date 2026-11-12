@@ -174,6 +174,10 @@ several frames.
 is the step-by-step, including how much to label for the numbers to mean
 anything and what each failure usually is.
 
+**What a real capture does to it**: [`docs/real_conditions.md`](docs/real_conditions.md)
+measures the same clips and labels after an encoder has been at them —
+compressed, rescaled and letterboxed — and lists the defects that exposed.
+
 Pooled over five measured runs (1,070 labelled knock/kill events, 2,040 labelled
 frames): knock and kill precision **1.0000**, recall **1.0000**, 0 duplicates,
 0 phantoms, 0 misses; teams-alive 0.9995; zone phase and state 1.0000; per-team

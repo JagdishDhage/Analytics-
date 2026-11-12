@@ -1,6 +1,6 @@
 # Real-capture conditions
 
-Measured at commit `6a285ae`. Every earlier number in this repository came
+Measured at commit `ecc29b8`. Every earlier number in this repository came
 from footage rendered exactly as the profile expected it. A real VOD is
 compressed, often rescaled, and often letterboxed, so these runs take the same
 clips and the same labels through an encoder first. They are still synthetic
@@ -25,7 +25,7 @@ the bars; without it a profile reads the wrong pixels and reports nothing.
 | clean 1080p (reference) | 1070 | 1.0000 | 1.0000 | 0 | 0 | 0 | 0.9995 | 0.9936 |
 | heavy compression, crf 34 | 223 | 0.9440 | 0.9821 | 3 | 10 | 4 | 0.9667 | 0.9400 |
 | rescaled to 1600x900 | 223 | 1.0000 | 1.0000 | 0 | 0 | 0 | 0.9900 | 0.9967 |
-| rescaled to 1280x720 | 223 | 1.0000 | 1.0000 | 0 | 0 | 0 | 0.9900 | 0.9767 |
+| rescaled to 1280x720 | 223 | 0.9955 | 1.0000 | 0 | 1 | 0 | 0.9900 | 0.9767 |
 | letterboxed into 1920x1080 | 223 | 1.0000 | 0.9955 | 0 | 0 | 1 | 1.0000 | 0.9967 |
 
 ## Phase 3, the map stream
