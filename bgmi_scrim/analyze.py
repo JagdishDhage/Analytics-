@@ -41,6 +41,7 @@ class PanelTagResolver:
         self.epoch_votes: Dict[int, Dict[str, float]] = {}
         self.pending_change: Dict[int, Tuple[str, int]] = {}
         self.reorders = 0
+        self.by_elimination: Optional[int] = None
 
     def vote(self, row: int, tag: str, conf: float) -> None:
         self.votes.setdefault(row, {})
@@ -77,8 +78,31 @@ class PanelTagResolver:
             used_tags.add(tag)
         self.assigned = out
         self.unresolved = [r for r in range(self.rows) if r not in out]
+        self._fill_last_by_elimination()
         self.epoch_votes = {}
         return out
+
+    def _fill_last_by_elimination(self) -> None:
+        """One row left and one tag left is not a guess, it is arithmetic.
+
+        Only when a single row is unnamed and a single roster tag is unclaimed,
+        and that row either voted for it or never read at all. Two of each is
+        ambiguous and stays unnamed.
+        """
+        if len(self.unresolved) != 1 or not self.roster:
+            return
+        left = [t for t in self.roster if t not in set(self.assigned.values())]
+        if len(left) != 1:
+            return
+        row = self.unresolved[0]
+        votes = self.votes.get(row, {})
+        if votes:
+            top = max(votes.items(), key=lambda kv: kv[1])[0]
+            if top != left[0]:
+                return          # the row read something else: do not overrule it
+        self.assigned[row] = left[0]
+        self.by_elimination = row
+        self.unresolved = []
 
     def end_epoch(self) -> None:
         """Apply a decisive, repeated disagreement as a row reassignment."""
@@ -221,6 +245,10 @@ class Analyzer:
                                int(prof.sampling.get("tag_prepass_frames", 6)))
             self.stats.tag_rows_resolved = len(tags.assigned)
             if self.verbose:
+                if tags.by_elimination is not None:
+                    print(f"[analyze] row {tags.by_elimination + 1} named by elimination: "
+                          f"it was the only row left and "
+                          f"{tags.tag(tags.by_elimination)} the only tag left")
                 print(f"[analyze] panel tags resolved for {len(tags.assigned)}/{rows} rows"
                       + (f"; rows {[r + 1 for r in tags.unresolved]} unnamed, their events "
                          f"will take a name from the kill feed where one matches"

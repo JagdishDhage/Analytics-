@@ -393,3 +393,33 @@ def test_panel_row_geometry_does_not_drift_when_a_profile_is_scaled():
         got = _slot_box(panel, r, 0)
         assert abs(got[1] - want_y) <= 1, f"row {r}: box {got[1]} vs drawn {want_y}"
         assert abs(_tag_box(panel, r)[1] - (int(120 * s) + int(r * 34 * s) + int(2 * s))) <= 1
+
+
+def test_the_last_unnamed_row_takes_the_last_unclaimed_tag():
+    """One row left and one tag left is arithmetic, not a guess."""
+    from bgmi_scrim.analyze import PanelTagResolver
+    r = PanelTagResolver(3, ["TX", "GB", "SOUL"])
+    r.vote(0, "TX", 0.9); r.vote(0, "TX", 0.9)
+    r.vote(1, "GB", 0.9); r.vote(1, "GB", 0.9)
+    r.vote(2, "SOUL", 0.03)                       # too weak to claim on its own
+    r.resolve()
+    assert r.tag(2) == "SOUL" and r.by_elimination == 2
+    assert r.unresolved == []
+
+
+def test_elimination_does_not_overrule_a_row_that_read_something_else():
+    from bgmi_scrim.analyze import PanelTagResolver
+    r = PanelTagResolver(3, ["TX", "GB", "SOUL"])
+    r.vote(0, "TX", 0.9); r.vote(0, "TX", 0.9)
+    r.vote(1, "GB", 0.9); r.vote(1, "GB", 0.9)
+    r.vote(2, "TX", 0.4)                          # it read TX, which is taken
+    r.resolve()
+    assert r.tag(2) == "ROW3" and r.by_elimination is None
+
+
+def test_two_unnamed_rows_stay_unnamed():
+    from bgmi_scrim.analyze import PanelTagResolver
+    r = PanelTagResolver(3, ["TX", "GB", "SOUL"])
+    r.vote(0, "TX", 0.9); r.vote(0, "TX", 0.9)
+    r.resolve()
+    assert r.tag(1) == "ROW2" and r.tag(2) == "ROW3"
