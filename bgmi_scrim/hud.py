@@ -115,7 +115,7 @@ def read_team_panel(frame: np.ndarray, prof: Profile, read_tags: bool = False) -
             pre = prepare_roi(frame, _tag_box(panel, r), _cfg(prof))
             if roi_is_blank(pre):
                 continue
-            txt, tconf = read_text(_bins(pre), retry_constrained=True)
+            txt, tconf = read_text(_bins(pre), label_roi=True)
             if txt:
                 if prof.team_tags:
                     pick, score = fuzzy_pick(txt, prof.team_tags)

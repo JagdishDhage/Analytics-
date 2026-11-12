@@ -278,18 +278,21 @@ def _read_numeral_one(binary: np.ndarray, max_digits: int = 3) -> Tuple[Optional
 
 def read_text(img, whitelist: str = ALNUM, psm: int = 7,
               accept_conf: float = 0.85,
-              retry_constrained: bool = False) -> Tuple[str, float]:
+              label_roi: bool = False) -> Tuple[str, float]:
     """Read a text ROI from one or more binarisations, keeping the best read.
 
-    The longest read wins, with confidence breaking ties. Ranking by
-    confidence first looks more principled and measured worse: while the char
-    whitelist was flattening every confidence to 0 this rule was effectively
-    "longest wins", and that is what the panel-tag accuracy was tuned on. With
-    real confidences arriving, ranking by them changed which binarisation won
-    for a tag ROI and took team_alive_count from 1.0000 to 0.9600 on gate run
-    A -- nothing confidently wrong, but 300 frames of confident-correct counts
-    turned into low-confidence ones. The confidence is still returned, which
-    is what the kill feed needed from it.
+    `label_roi` says this is a short region known to hold one label, such as
+    a team tag in the panel. The two kinds of region want opposite rules, as
+    measured on gate run A and on the feed-only clip:
+
+      ranking            feed-only clip           panel team_alive_count
+      confidence first   1.0000/1.0000, 0 phantom 0.9600, TX unresolved
+      length first       4 phantoms               1.0000, TX resolved
+
+    A feed line is long, and a longer garbled read of it parses into an event
+    that is not there. A tag is two to five characters, and the way it fails
+    is by coming back truncated or empty, so there the longer read is the
+    better one and an empty read is worth asking again for.
     """
     best: Tuple[str, float] = ("", 0.0)
     imgs = _as_images(img)
@@ -298,11 +301,13 @@ def read_text(img, whitelist: str = ALNUM, psm: int = 7,
         txt = txt.upper().strip()
         if not txt:
             continue
-        if (len(txt), conf) > (len(best[0]), best[1]):
+        rank = (len(txt), conf) if label_roi else (conf, len(txt))
+        cur = (len(best[0]), best[1]) if label_roi else (best[1], len(best[0]))
+        if rank > cur:
             best = (txt, conf)
         if conf >= accept_conf and len(txt) >= len(best[0]):
             break
-    if best[0] or not retry_constrained:
+    if best[0] or not label_roi:
         return best
     # Nothing readable, and the caller says this ROI holds something. On a
     # short, highlighted ROI -- our own team's row in the panel is drawn
@@ -316,7 +321,7 @@ def read_text(img, whitelist: str = ALNUM, psm: int = 7,
     # Only a caller that knows the region must contain text may ask for this.
     # A kill-feed row that reads as nothing usually IS nothing -- the feed is
     # shorter than its five slots -- and squeezing characters out of it turns
-    # empty rows into events: on the feed-only clip it cost 4 phantoms.
+    # empty rows into events.
     for b in imgs:
         txt, _ = _tess(b, psm, whitelist, engine_whitelist=True)
         txt = txt.upper().strip()

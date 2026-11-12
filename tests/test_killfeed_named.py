@@ -101,7 +101,7 @@ def test_an_unreadable_text_roi_falls_back_to_the_constrained_engine():
     from bgmi_scrim.ocr import read_text
     img = np.full((40, 80), 255, np.uint8)
     cv2.putText(img, "TX", (6, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, 0, 2, cv2.LINE_AA)
-    txt, _ = read_text(img, retry_constrained=True)
+    txt, _ = read_text(img, label_roi=True)
     assert txt, "a legible ROI must not read as nothing"
     assert txt.startswith("T")
 
@@ -118,4 +118,4 @@ def test_the_constrained_retry_is_not_used_on_feed_rows():
     # and the default must not be the retrying one
     import inspect
     sig = inspect.signature(read_text)
-    assert sig.parameters["retry_constrained"].default is False
+    assert sig.parameters["label_roi"].default is False
