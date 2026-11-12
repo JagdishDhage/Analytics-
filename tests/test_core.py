@@ -117,6 +117,28 @@ def test_panel_event_takes_killer_from_the_feed():
     assert out[0].killer_team == "GB" and out[0].source == "panel+feed"
 
 
+def test_the_feed_names_an_event_the_panel_could_not():
+    """A panel row whose tag never resolved still sees the knock happen; the
+    feed is then the only place the victim's name exists."""
+    fz = Fuser(fuse_window_s=6.0, unnamed=lambda t: t is None or str(t).startswith("ROW"))
+    fz.add_panel(PanelEvent(10.0, 300, "kill", "ROW7", 2, 0.9))
+    fz.add_feed(_feed_ev(10.3, kind="kill", victim=("TX", 2), killer=("GB", 1)))
+    out = fz.flush(now=None)
+    assert len(out) == 1
+    assert out[0].victim_team == "TX" and out[0].victim_slot == 2
+    assert out[0].killer_team == "GB" and out[0].source == "panel+feed_name"
+    assert fz.named_by_feed == 1
+
+
+def test_a_named_panel_event_keeps_its_own_victim():
+    fz = Fuser(fuse_window_s=6.0, unnamed=lambda t: t is None or str(t).startswith("ROW"))
+    fz.add_panel(PanelEvent(10.0, 300, "kill", "TX", 2, 0.9))
+    fz.add_feed(_feed_ev(10.3, kind="kill", victim=("SOUL", 1), killer=("GB", 1)))
+    out = fz.flush(now=None)
+    assert out[0].victim_team == "TX" and out[0].victim_slot == 2
+    assert fz.named_by_feed == 0
+
+
 def test_feed_only_event_is_dropped_when_the_panel_tracks_that_slot():
     fz = Fuser(fuse_window_s=6.0, panel_blind=lambda *_: False)
     fz.add_feed(_feed_ev(10.0))
@@ -267,9 +289,30 @@ def test_tag_resolver_assigns_each_team_to_one_row():
     r = PanelTagResolver(3, ["TX", "GB", "SOUL"])
     r.vote(0, "TX", 0.9); r.vote(0, "GB", 0.2)
     r.vote(1, "GB", 0.8); r.vote(1, "TX", 0.7)
-    r.vote(2, "SOUL", 0.6)
+    r.vote(2, "SOUL", 0.9); r.vote(2, "SOUL", 0.8)
     assert r.resolve() == {0: "TX", 1: "GB", 2: "SOUL"}
     assert r.tag(0) == "TX" and r.resolved(2)
+
+
+def test_a_row_that_cannot_name_itself_does_not_take_another_row_s_tag():
+    """One weak read used to displace a whole team: the row with the bad read
+    took the tag, and the team that owned it was reported as ROWn."""
+    from bgmi_scrim.analyze import PanelTagResolver
+    r = PanelTagResolver(2, ["TX", "GB"])
+    r.vote(0, "TX", 0.05)                      # a glimpse, nothing more
+    r.vote(1, "TX", 0.9); r.vote(1, "TX", 0.9)
+    assigned = r.resolve()
+    assert assigned == {1: "TX"}
+    assert r.tag(0) == "ROW1" and not r.resolved(0)
+    assert r.unresolved == [0]
+
+
+def test_a_split_vote_leaves_the_row_unnamed():
+    from bgmi_scrim.analyze import PanelTagResolver
+    r = PanelTagResolver(1, ["TX", "GB"])
+    r.vote(0, "TX", 0.9); r.vote(0, "GB", 0.85)    # no majority
+    assert r.resolve() == {}
+    assert r.tag(0) == "ROW1"
 
 
 def test_unresolved_row_is_named_not_guessed():

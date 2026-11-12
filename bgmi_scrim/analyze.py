@@ -29,9 +29,13 @@ class PanelTagResolver:
     picked up.
     """
 
-    def __init__(self, rows: int, roster: Optional[List[str]] = None):
+    def __init__(self, rows: int, roster: Optional[List[str]] = None,
+                 min_share: float = 0.6, min_weight: float = 0.8):
         self.rows = rows
         self.roster = list(roster or [])
+        self.min_share = min_share
+        self.min_weight = min_weight
+        self.unresolved: List[int] = []
         self.votes: Dict[int, Dict[str, float]] = {}
         self.assigned: Dict[int, str] = {}
         self.epoch_votes: Dict[int, Dict[str, float]] = {}
@@ -59,10 +63,20 @@ class PanelTagResolver:
                 continue
             if self.roster and tag in used_tags:
                 continue
+            votes = self.votes.get(r, {})
+            # Judge the share against the tags still going: once another row
+            # has taken TX, a row torn between TX and GB is not torn at all.
+            total = sum(w for t, w in votes.items() if t not in used_tags)
+            share = (votes.get(tag, 0.0) / total) if total else 0.0
+            if w < self.min_weight or share < self.min_share:
+                # A row that cannot name itself must not take a tag off a row
+                # that can: one weak read otherwise displaces a whole team.
+                continue
             out[r] = tag
             used_rows.add(r)
             used_tags.add(tag)
         self.assigned = out
+        self.unresolved = [r for r in range(self.rows) if r not in out]
         self.epoch_votes = {}
         return out
 
@@ -199,13 +213,18 @@ class Analyzer:
         panel = prof.rois.get("team_panel")
         rows = int(panel.meta.get("rows", 25)) if panel else 0
         slots = int(panel.meta.get("slots", 4)) if panel else 0
-        tags = PanelTagResolver(rows, prof.team_tags)
+        tags = PanelTagResolver(rows, prof.team_tags,
+                                min_share=float(prof.confirm_samples.get("tag_min_share", 0.5)),
+                                min_weight=float(prof.confirm_samples.get("tag_min_weight", 0.8)))
         if panel:
             self._resolve_tags(path, info, prof, tags,
                                int(prof.sampling.get("tag_prepass_frames", 6)))
             self.stats.tag_rows_resolved = len(tags.assigned)
             if self.verbose:
-                print(f"[analyze] panel tags resolved for {len(tags.assigned)}/{rows} rows")
+                print(f"[analyze] panel tags resolved for {len(tags.assigned)}/{rows} rows"
+                      + (f"; rows {[r + 1 for r in tags.unresolved]} unnamed, their events "
+                         f"will take a name from the kill feed where one matches"
+                         if tags.unresolved else ""))
 
         counters = {
             TEAMS_ALIVE: ConfirmedField(TEAMS_ALIVE, prof.confirm_n(TEAMS_ALIVE),
@@ -235,7 +254,8 @@ class Analyzer:
         fuser = Fuser(fuse_window_s=prof.fuse_window_s,
                       panel_is_authority=bool(panel),
                       panel_blind=lambda team, slot: self._panel_blind(
-                          tags, slot_fields, rows, slots, team, slot))
+                          tags, slot_fields, rows, slots, team, slot),
+                      unnamed=lambda team: team is None or str(team).startswith("ROW"))
 
         team_counts: Dict[int, int] = {}
         match_index = 0

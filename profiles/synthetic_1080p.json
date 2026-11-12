@@ -21,7 +21,9 @@
     "zone_phase": 3,
     "zone_state": 2,
     "slot": 2,
-    "feed_sightings": 2
+    "feed_sightings": 2,
+    "tag_min_share": 0.6,
+    "tag_min_weight": 0.8
   },
   "confidence_threshold": 0.6,
   "dedup_window_s": 12.0,

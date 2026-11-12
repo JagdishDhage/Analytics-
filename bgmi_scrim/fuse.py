@@ -35,6 +35,10 @@ class Fuser:
     # (victim_team, victim_slot) -> True when the panel has no confirmed state
     # for that slot, so it cannot speak for or against a feed-only event.
     panel_blind: Callable[[Optional[str], Optional[int]], bool] = lambda a, b: True
+    #: True when the panel could not name this team, so the feed's name is the
+    #: only one there is.
+    unnamed: Callable[[Optional[str]], bool] = lambda t: False
+    named_by_feed: int = 0
     _panel: List[PanelEvent] = field(default_factory=list)
     _feed: List[FeedEvent] = field(default_factory=list)
     suppressed_feed: List[FeedEvent] = field(default_factory=list)
@@ -47,9 +51,16 @@ class Fuser:
         self._feed.append(ev)
 
     def _match_feed(self, pe: PanelEvent) -> Optional[FeedEvent]:
+        anonymous = self.unnamed(pe.victim_team)
         best, best_dt = None, None
         for fe in self._feed:
             if fe.kind != pe.kind:
+                continue
+            if anonymous:
+                # the panel saw it happen but cannot say to whom; the feed can
+                dt = abs(fe.t - pe.t)
+                if dt <= self.fuse_window_s and (best_dt is None or dt < best_dt):
+                    best, best_dt = fe, dt
                 continue
             if pe.victim_team is not None and fe.victim_team != pe.victim_team:
                 continue
@@ -73,17 +84,22 @@ class Fuser:
             killer_team = killer_slot = None
             conf = pe.confidence
             source = "panel"
+            victim_team, victim_slot = pe.victim_team, pe.victim_slot
             if fe is not None:
                 self._feed.remove(fe)
                 killer_team, killer_slot = fe.killer_team, fe.killer_slot
                 source = "panel+feed"
+                if self.unnamed(victim_team) and fe.victim_team:
+                    victim_team, victim_slot = fe.victim_team, fe.victim_slot
+                    source = "panel+feed_name"
+                    self.named_by_feed += 1
                 if killer_team is not None:
                     self.attributed += 1
                 conf = min(1.0, 0.5 * pe.confidence + 0.5 * fe.confidence + 0.1)
             out.append(Event(
                 t=pe.t, type=pe.kind, confidence=conf,
                 state="ok" if conf > 0 else "unknown", frame=pe.frame, source=source,
-                victim_team=pe.victim_team, victim_slot=pe.victim_slot,
+                victim_team=victim_team, victim_slot=victim_slot,
                 killer_team=killer_team, killer_slot=killer_slot,
                 zone_phase=pe.zone_phase, match_index=pe.match_index))
             self._panel.remove(pe)
