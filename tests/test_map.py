@@ -322,13 +322,19 @@ def test_a_short_tag_does_not_absorb_a_longer_one():
     # a clean label still resolves
     assert match_label("ORCAXALFA", prof)[:2] == ("ORCA", "ALFA")
     assert match_label("ORXALFA", prof)[:2] == ("OR", "ALFA")
-    # a garbled one that fits both says nothing rather than picking the short tag
-    team, player, _score = match_label("0RCAXALFA", prof)
+    # a garbled one resolves to the longer tag, never to the short one
+    team, _player, _score = match_label("0RCAXALFA", prof)
     assert team in (None, "ORCA")
     assert match_team("ORCAXALFA", prof)[0] == "ORCA"
 
 
-def test_a_label_that_fits_two_teams_equally_is_not_named():
-    prof = MapProfile.from_dict({"roster": {"GB": ["ALFA"], "GD": ["ALFA"]}})
-    team, player, _ = match_label("GXXALFA", prof)
-    assert team is None
+def test_the_separator_decides_between_a_tag_and_a_longer_one():
+    """TEAMxPLAYER normalises to TAG + X + NAME, so where a longer roster tag
+    starts with this one, the X has to be where this tag says it is."""
+    prof = MapProfile.from_dict({"roster": {"OR": ["ALFA"], "ORCA": ["ALFA"]}})
+    assert match_label("ORXALFA", prof)[:2] == ("OR", "ALFA")
+    assert match_label("ORCAXALFA", prof)[:2] == ("ORCA", "ALFA")
+    assert match_team("ORCAXALFA", prof)[0] == "ORCA"
+    # a tag with nothing like it in the roster is unaffected
+    plain = MapProfile.from_dict({"roster": {"TX": ["ALFA"], "GB": ["BRAVO"]}})
+    assert match_label("TXXALFA", plain)[:2] == ("TX", "ALFA")

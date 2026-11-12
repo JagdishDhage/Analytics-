@@ -186,6 +186,24 @@ def candidate_labels(prof: MapProfile) -> List[Tuple[str, str, str]]:
     return [(_norm(f"{t}X{p}"), t, p) for t, p in prof.all_labels()]
 
 
+def _prefix_confusable(team: str, text: str, prof: MapProfile) -> bool:
+    """Would a longer roster tag explain this text just as well?
+
+    OR is the start of ORCA, so a garbled ORCA label matches OR almost as well
+    as it matches ORCA, and at 720p that put 1564 samples on the wrong team.
+    Where a longer tag begins with this one, the separator has to be where
+    this tag says it is: TEAMxPLAYER normalises to TAG + "X" + NAME.
+    """
+    tag = _norm(team)
+    longer = [t for t in prof.teams
+              if _norm(t) != tag and _norm(t).startswith(tag)]
+    if not longer:
+        return False
+    if len(text) <= len(tag):
+        return True
+    return text[len(tag)] != "X"
+
+
 def match_label(text: str, prof: MapProfile,
                 candidates: Optional[Sequence[Tuple[str, str, str]]] = None
                 ) -> Tuple[Optional[str], Optional[str], float]:
@@ -205,12 +223,7 @@ def match_label(text: str, prof: MapProfile,
         best, bteam, bplayer = scored[0]
         if best < float(prof.label.get("min_score", 0.6)):
             return None, None, best
-        # A short tag like OR sits inside half the roster once the text is
-        # garbled. If a second entry scores almost as well, the label does not
-        # say which, so it says nothing.
-        margin = float(prof.label.get("min_margin", 0.06))
-        runner = next((sc for sc, tm, pl in scored[1:] if tm != bteam), 0.0)
-        if best - runner < margin:
+        if _prefix_confusable(bteam, t, prof):
             return None, None, best * 0.5
         return bteam, bplayer, best
     m = prof.label_re().search(text.upper())
@@ -260,9 +273,8 @@ def match_team(text: str, prof: MapProfile) -> Tuple[Optional[str], float]:
         return None, 0.0
     scores.sort(reverse=True)
     score, best = scores[0]
-    runner = scores[1][0] if len(scores) > 1 else 0.0
-    if score - runner < float(prof.label.get("min_margin", 0.06)):
-        return None, score * 0.5          # two tags fit this text equally well
+    if _prefix_confusable(best, t, prof):
+        return None, score * 0.5
     # a player name from that team in the same text is a second witness
     if any(_norm(p) in t for p in prof.players_of(best)):
         score = min(1.0, score + 0.12)
