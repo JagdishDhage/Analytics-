@@ -1,0 +1,237 @@
+{
+  "_calibrated": true,
+  "_note": "A map stream with a kill feed and no HUD: no lobby counters, no team list panel, no placement card, no winner banner. Only the feed is calibrated, so only the feed can be read.",
+  "name": "mapfeed_only_1080p",
+  "overlay": "map-stream-with-feed",
+  "resolution": [
+    1920,
+    1080
+  ],
+  "our_team": "TX",
+  "sampling": {
+    "base_fps": 2.0,
+    "burst_fps": 5.0,
+    "burst_window_s": 3.0
+  },
+  "confirm_samples": {
+    "default": 3,
+    "feed_sightings": 2
+  },
+  "confidence_threshold": 0.6,
+  "dedup_window_s": 12.0,
+  "fuse_window_s": 6.0,
+  "preprocess": {
+    "upscale": 3,
+    "min_height": 60,
+    "clahe_clip": 2.0,
+    "clahe_grid": 8,
+    "adaptive_block": 25,
+    "adaptive_c": 5,
+    "invert": true
+  },
+  "team_tags": [
+    "TX",
+    "GB",
+    "SOUL",
+    "GODL",
+    "ENT",
+    "ORCA",
+    "BLIND",
+    "HYD",
+    "REV",
+    "SKY",
+    "VLT",
+    "NGE",
+    "MARC",
+    "AUT",
+    "VST",
+    "TSM",
+    "XSP",
+    "IQOO",
+    "ZEUS",
+    "NOVA",
+    "FS",
+    "GXR",
+    "MDY",
+    "K9",
+    "OR"
+  ],
+  "roster": {
+    "TX": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "GB": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "SOUL": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "GODL": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "ENT": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "ORCA": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "BLIND": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "HYD": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "REV": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "SKY": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "VLT": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "NGE": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "MARC": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "AUT": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "VST": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "TSM": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "XSP": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "IQOO": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "ZEUS": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "NOVA": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "FS": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "GXR": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "MDY": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "K9": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ],
+    "OR": [
+      "ALFA",
+      "BRAVO",
+      "CHARL",
+      "DELTA"
+    ]
+  },
+  "feed_keywords": {
+    "knock": [
+      "KNOCKED OUT",
+      "KNOCKED",
+      "KNOCK"
+    ],
+    "kill": [
+      "FINISHED",
+      "KILLED",
+      "ELIMINATED"
+    ]
+  },
+  "rois": {
+    "kill_feed": {
+      "box": [
+        1410,
+        40,
+        500,
+        26
+      ],
+      "kind": "feed",
+      "rows": 5,
+      "row_pitch": 34,
+      "row_h": 26
+    }
+  }
+}
