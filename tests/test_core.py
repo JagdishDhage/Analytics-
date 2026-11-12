@@ -139,6 +139,26 @@ def test_the_feed_names_an_event_the_panel_could_not():
     assert fz.named_by_feed == 1
 
 
+def test_the_feed_may_only_name_an_event_about_the_same_slot():
+    """The panel knows which pip went down even when it cannot read the tag,
+    so a feed line about another slot is about another player."""
+    # a lobby where the panel tracks every other team, as a real run does
+    fz = Fuser(fuse_window_s=6.0, panel_blind=lambda *_: False,
+               unnamed=lambda t: t is None or str(t).startswith("ROW"))
+    fz.add_panel(PanelEvent(98.3, 300, "knock", "ROW1", 4, 0.9))
+    fz.add_feed(_feed_ev(98.3, kind="knock", victim=("NOVA", 2), killer=("GB", 1)))
+    assert fz.flush(now=None) == []          # slot 4 is not slot 2
+    assert fz.unnamed_dropped == 1 and fz.named_by_feed == 0
+    assert len(fz.suppressed_feed) == 1      # NOVA is tracked, so that line is a misread
+
+    fz2 = Fuser(fuse_window_s=6.0, panel_blind=lambda *_: False,
+                unnamed=lambda t: t is None or str(t).startswith("ROW"))
+    fz2.add_panel(PanelEvent(80.0, 300, "knock", "ROW1", 2, 0.9))
+    fz2.add_feed(_feed_ev(80.1, kind="knock", victim=("TX", 2), killer=("GB", 1)))
+    out = fz2.flush(now=None)
+    assert len(out) == 1 and out[0].victim_team == "TX" and out[0].victim_slot == 2
+
+
 def test_a_named_panel_event_keeps_its_own_victim():
     fz = Fuser(fuse_window_s=6.0, unnamed=lambda t: t is None or str(t).startswith("ROW"))
     fz.add_panel(PanelEvent(10.0, 300, "kill", "TX", 2, 0.9))

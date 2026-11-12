@@ -58,7 +58,13 @@ class Fuser:
             if fe.kind != pe.kind:
                 continue
             if anonymous:
-                # the panel saw it happen but cannot say to whom; the feed can
+                # The panel saw it happen and knows which slot went down; it
+                # just cannot read the team. The feed can, but only a feed line
+                # about the same slot is about the same player: without that
+                # check the nearest line in time wins and names the wrong team.
+                if (pe.victim_slot is not None and fe.victim_slot is not None
+                        and int(pe.victim_slot) != int(fe.victim_slot)):
+                    continue
                 dt = abs(fe.t - pe.t)
                 if dt <= self.fuse_window_s and (best_dt is None or dt < best_dt):
                     best, best_dt = fe, dt
