@@ -32,12 +32,62 @@ class FeedEvent:
     sightings: int = 1
 
 
+def _norm(text: str) -> str:
+    return re.sub(r"[^A-Z0-9]", "", (text or "").upper())
+
+
+def _actor_by_name(text: str, prof: Profile, prefer: str
+                   ) -> Tuple[Optional[str], Optional[int], float]:
+    """Resolve a TEAMxPLAYER name against the roster.
+
+    A feed that names players, which is what most overlays show, carries no
+    slot number. The roster's order supplies one, so a named line can still be
+    matched against the pip the panel saw go down.
+    """
+    import difflib
+    t = _norm(text)
+    if not prof.roster or len(t) < 3:
+        return None, None, 0.0
+    best = (0.0, None, None, -1)
+    for team, players in prof.roster.items():
+        for i, player in enumerate(players):
+            cand = _norm(f"{team}X{player}")
+            if not cand:
+                continue
+            # find the best window of the text that looks like this label
+            for start in range(0, max(1, len(t) - len(cand) + 2)):
+                window = t[start:start + len(cand)]
+                if len(window) < 3:
+                    continue
+                score = difflib.SequenceMatcher(None, window, cand).ratio()
+                if score > best[0]:
+                    best = (score, team, i + 1, start)
+    score, team, slot, start = best
+    if team is None or score < 0.75:
+        return None, None, score
+    return team, slot, score
+
+
 def _actor(text: str, roster: List[str], prefer: str) -> Tuple[Optional[str], Optional[int], float]:
     matches = list(ACTOR_RE.finditer(text))
     if not matches:
         return None, None, 0.0
     m = matches[-1] if prefer == "last" else matches[0]
     tag, raw_slot = m.group(1), m.group(2)
+    if raw_slot in _SLOT_FIX and roster:
+        # 'I' and 'L' are here because OCR renders a slot '1' as either. But
+        # they are also the last letter of real tags: SOUL, GODL. Taking the
+        # letter as a slot invents 'slot 1' for every one of that team's feed
+        # lines, at the tag's own confidence. The roster decides which it is:
+        # if the tag reads better with the letter attached, it is part of the
+        # name and this line simply carries no slot.
+        joined, j_score = fuzzy_pick(tag + raw_slot, roster)
+        alone, a_score = fuzzy_pick(tag, roster)
+        if joined and j_score >= max(a_score, 0.6):
+            # an unambiguous digit after the whole tag is still a slot:
+            # 'SOUL#1' names SOUL slot 1, 'SOULXVIPER' names no slot at all.
+            m2 = re.search(re.escape(tag + raw_slot) + r"\s*#?\s*([1-4])(?![0-9])", text)
+            return joined, (int(m2.group(1)) if m2 else None), j_score
     slot = int(_SLOT_FIX.get(raw_slot, raw_slot))
     if roster:
         pick, score = fuzzy_pick(tag, roster)
@@ -66,6 +116,16 @@ def parse_feed_line(text: str, line_conf: float, prof: Profile) -> Optional[Feed
     left, _, right = t.partition(kw_used)
     ktag, kslot, kscore = _actor(left, prof.team_tags, "last")
     vtag, vslot, vscore = _actor(right, prof.team_tags, "first")
+    if prof.roster:
+        # a feed that names players beats one parsed as tag plus slot number
+        nk, nks, nkscore = _actor_by_name(left, prof, "last")
+        nv, nvs, nvscore = _actor_by_name(right, prof, "first")
+        # a tie goes to the read that carries a slot: a tag-only read scores
+        # on the tag alone, so it ties easily while saying strictly less.
+        if nvscore > vscore or (nvscore >= vscore and nvs is not None and vslot is None):
+            vtag, vslot, vscore = nv, nvs, nvscore
+        if nkscore > kscore or (nkscore >= kscore and nks is not None and kslot is None):
+            ktag, kslot, kscore = nk, nks, nkscore
     if vtag is None:
         return None   # no identifiable victim: not an event
     conf = min(1.0, 0.25 + 0.35 * line_conf + 0.4 * vscore)

@@ -50,11 +50,35 @@ def _pad(img: np.ndarray, px: int = 10) -> np.ndarray:
     return cv2.copyMakeBorder(img, px, px, px, px, cv2.BORDER_CONSTANT, value=255)
 
 
+#: tesseract itself aborts on some inputs (it has died with SIGFPE on a wide,
+#: sparse feed row). One engine crash must not end a whole run, and it must
+#: never become a value either: the call degrades to an unreadable region,
+#: which the callers already treat as "no reading". Counted so a run can
+#: report how often the engine failed rather than hide it.
+_OCR_FAILURES = 0
+
+
+def ocr_failures() -> int:
+    return _OCR_FAILURES
+
+
+def reset_ocr_failures() -> None:
+    global _OCR_FAILURES
+    _OCR_FAILURES = 0
+
+
 def _tess(img: np.ndarray, psm: int, whitelist: str) -> Tuple[str, float]:
+    global _OCR_FAILURES
     if not tesseract_available():
         raise OcrUnavailable("tesseract binary not found")
     cfg = f"--psm {psm} --oem 1 -c tessedit_char_whitelist={whitelist}"
-    data = pytesseract.image_to_data(_pad(img), config=cfg, output_type=Output.DICT)
+    try:
+        data = pytesseract.image_to_data(_pad(img), config=cfg, output_type=Output.DICT)
+    except OcrUnavailable:
+        raise
+    except Exception:  # engine abort, bad exit status, unparsable TSV
+        _OCR_FAILURES += 1
+        return "", 0.0
     chunks: List[str] = []
     confs: List[float] = []
     for txt, conf in zip(data.get("text", []), data.get("conf", [])):

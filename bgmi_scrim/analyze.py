@@ -14,6 +14,7 @@ from .events import (Event, KILL, KNOCK, MAP_NAME, MATCH_END, MATCH_START,
                      WINNER, ZONE_PHASE, ZONE_STATE)
 from .fuse import Fuser, PanelEvent
 from .killfeed import FeedTracker
+from .ocr import ocr_failures, reset_ocr_failures
 from .profile import Profile
 from .statemachine import UNKNOWN, ConfirmedField
 
@@ -159,6 +160,7 @@ class RunStats:
     tag_rows_resolved: int = 0
     panel_reorders: int = 0
     attributed_kills: int = 0
+    ocr_failures: int = 0
     seconds: float = 0.0
 
     def as_dict(self) -> Dict[str, Any]:
@@ -214,6 +216,7 @@ class Analyzer:
     # ---------------- pass B: full extraction ----------------
     def run(self, path: str) -> Tuple[List[Event], RunStats]:
         t0 = time.time()
+        reset_ocr_failures()
         info = sampler.probe(path)
         box = self.content_box
         if box is None and self.auto_content:
@@ -449,6 +452,7 @@ class Analyzer:
         self.stats.events_named_by_feed = fuser.named_by_feed
         self.stats.panel_reorders = tags.reorders
         self.stats.attributed_kills = fuser.attributed
+        self.stats.ocr_failures = ocr_failures()
         self.stats.seconds = time.time() - t0
         self.events.sort(key=lambda e: (e.t, e.type, str(e.victim_team), e.victim_slot or 0))
         self.stats.events = len(self.events)

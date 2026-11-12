@@ -82,6 +82,9 @@ class Profile:
         "upscale": 2, "clahe_clip": 2.0, "clahe_grid": 8,
         "adaptive_block": 31, "adaptive_c": 5, "invert": True})
     team_tags: List[str] = field(default_factory=list)
+    #: team tag -> player names, as the overlay writes them. A kill feed that
+    #: names players rather than slots is matched against this.
+    roster: Dict[str, List[str]] = field(default_factory=dict)
     our_team: Optional[str] = None
     map_names: List[str] = field(default_factory=lambda: [
         "ERANGEL", "MIRAMAR", "SANHOK", "VIKENDI", "LIVIK", "NUSA", "RONDO", "KARAKIN"])
@@ -118,8 +121,8 @@ class Profile:
         for attr in ("sampling", "confirm_samples", "preprocess", "feed_keywords"):
             if data.get(attr):
                 getattr(p, attr).update(data[attr])
-        for attr in ("confidence_threshold", "team_tags", "our_team", "map_names",
-                     "dedup_window_s", "fuse_window_s"):
+        for attr in ("confidence_threshold", "team_tags", "roster", "our_team",
+                     "map_names", "dedup_window_s", "fuse_window_s"):
             if data.get(attr) is not None:
                 setattr(p, attr, data[attr])
         p.extras = {k: v for k, v in data.items() if k.startswith("_")}
@@ -136,6 +139,7 @@ class Profile:
             "confidence_threshold": self.confidence_threshold,
             "preprocess": self.preprocess,
             "team_tags": self.team_tags,
+            "roster": self.roster,
             "our_team": self.our_team,
             "map_names": self.map_names,
             "feed_keywords": self.feed_keywords,
@@ -162,6 +166,15 @@ class Profile:
         out.rois = {k: r.scaled(sx, sy) for k, r in self.rois.items()}
         out.resolution = (width, height)
         return out
+
+    def slot_of(self, team: str, player: str) -> Optional[int]:
+        """Slot number from the roster's order, so a named feed line can be
+        compared with a panel pip."""
+        names = self.roster.get(team) or []
+        for i, n in enumerate(names):
+            if n.upper() == player.upper():
+                return i + 1
+        return None
 
     @property
     def calibrated(self) -> bool:

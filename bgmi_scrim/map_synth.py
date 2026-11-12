@@ -48,6 +48,7 @@ class MapSim:
     pois: List[Poi] = field(default_factory=list)
     phases: List[Dict[str, Any]] = field(default_factory=list)
     deaths: Dict[Tuple[str, str], float] = field(default_factory=dict)
+    feed: List[Dict[str, Any]] = field(default_factory=list)
     paths: Dict[Tuple[str, str], List[Tuple[float, float, float]]] = field(default_factory=dict)
 
     def build(self) -> "MapSim":
@@ -139,7 +140,49 @@ class MapSim:
                     continue      # last team survives
                 self.deaths[(team, pname)] = min(self.duration - 2,
                                                  base + rng.uniform(0, 25))
+        self._build_feed(rng)
         return self
+
+    def _build_feed(self, rng: random.Random) -> None:
+        """A kill feed for the deaths, naming players as an overlay does.
+
+        The killer is the nearest living enemy at that moment, which is the
+        cheapest way to make the feed consistent with the positions.
+        """
+        out: List[Dict[str, Any]] = []
+        for (team, player), t in sorted(self.deaths.items(), key=lambda kv: kv[1]):
+            victim = self.position(team, player, max(0.0, t - 0.5))
+            if victim is None:
+                continue
+            best, best_d = None, 1e9
+            for ti in range(self.n_teams):
+                other = TEAMS[ti]
+                if other == team:
+                    continue
+                for p2 in PLAYERS:
+                    d = self.deaths.get((other, p2))
+                    if d is not None and d <= t:
+                        continue
+                    q = self.position(other, p2, max(0.0, t - 0.5))
+                    if q is None:
+                        continue
+                    dist = math.dist(victim, q)
+                    if dist < best_d:
+                        best, best_d = (other, p2), dist
+            if best is None:
+                continue
+            out.append({"t": round(max(0.0, t - rng.uniform(2.0, 5.0)), 2), "type": "knock",
+                        "victim_team": team, "victim_player": player,
+                        "killer_team": best[0], "killer_player": best[1]})
+            out.append({"t": round(t, 2), "type": "kill",
+                        "victim_team": team, "victim_player": player,
+                        "killer_team": best[0], "killer_player": best[1]})
+        out.sort(key=lambda e: e["t"])
+        self.feed = out
+
+    def feed_at(self, t: float, hold: float = 6.0, rows: int = 5
+                ) -> List[Dict[str, Any]]:
+        return [e for e in self.feed if e["t"] <= t <= e["t"] + hold][-rows:]
 
     # ---------------- state ----------------
     def position(self, team: str, player: str, t: float) -> Optional[Tuple[float, float]]:
@@ -234,6 +277,20 @@ def render_map_frame(sim: MapSim, t: float, width: int, height: int,
             cv2.putText(frame, f"{team}x{pname}", (int(px) + 7, int(py) - 6),
                         cv2.FONT_HERSHEY_SIMPLEX, label_scale, (245, 245, 245), 1,
                         cv2.LINE_AA)
+    # kill feed, to the right of the map where an overlay puts it
+    sx = width / 1920.0
+    sy = height / 1080.0
+    fx = x0 + mw + int(16 * sx)
+    fw = max(60, width - fx - 10)
+    for i, e in enumerate(sim.feed_at(t)[::-1]):
+        ry = int(40 * sy) + i * int(34 * sy)
+        verb = "KNOCKED" if e["type"] == "knock" else "FINISHED"
+        txt = (f"{e['killer_team']}x{e['killer_player']} {verb} "
+               f"{e['victim_team']}x{e['victim_player']}")
+        cv2.rectangle(frame, (fx, ry), (fx + fw, ry + int(26 * sy)), (34, 34, 38), -1)
+        cv2.putText(frame, txt, (fx + int(6 * sx), ry + int(19 * sy)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.42 * sx, (238, 238, 238), 1, cv2.LINE_AA)
+
     if noise > 0:
         n = np.random.default_rng(int(t * 1000) % 99991).normal(0, noise * 255, frame.shape)
         frame = np.clip(frame.astype(np.int16) + n.astype(np.int16), 0, 255).astype(np.uint8)
@@ -266,6 +323,12 @@ def labels_for(sim: MapSim, label_fps: float = 2.0) -> List[Dict[str, Any]]:
         t += step
     for (team, player), dt in sorted(sim.deaths.items()):
         out.append({"kind": "death", "t": round(dt, 2), "team": team, "player": player})
+    for e in sim.feed:
+        out.append({"kind": "event", "t": e["t"], "type": e["type"],
+                    "victim_team": e["victim_team"],
+                    "victim_slot": PLAYERS.index(e["victim_player"]) + 1,
+                    "killer_team": e["killer_team"],
+                    "killer_slot": PLAYERS.index(e["killer_player"]) + 1})
     return out
 
 
