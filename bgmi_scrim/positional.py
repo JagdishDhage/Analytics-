@@ -32,6 +32,10 @@ def fmt_ts(t: float) -> str:
     return f"{int(t // 60):02d}:{int(t % 60):02d}"
 
 
+#: below this much time inside the safe circle, the edge-time share is not
+#: reported as a percentage and is not ranked as a practice focus.
+EDGE_MIN_INSIDE_S = 30.0
+
 @dataclass
 class PositionalMatch:
     """Everything the map stream says about one team in one match."""
@@ -46,6 +50,8 @@ class PositionalMatch:
     phases: List[Dict[str, Any]] = field(default_factory=list)
     zone_entries: List[Dict[str, Any]] = field(default_factory=list)
     edge_fraction: Optional[float] = None
+    #: time inside the circle the fraction above is computed over
+    edge_inside_s: float = 0.0
     time_outside_blue_s: Optional[float] = None
     tracked_from_s: Optional[float] = None
     tracked_to_s: Optional[float] = None
@@ -140,6 +146,7 @@ def positional_match(number: int, tracks_path: Optional[str],
     zs = next((e for e in ours if e["type"] == "zone_summary"), None)
     if zs is not None:
         pm.edge_fraction = zs.get("edge_time_fraction")
+        pm.edge_inside_s = float(zs.get("edge_time_inside_s") or 0.0)
         pm.time_outside_blue_s = zs.get("time_outside_blue_s")
         pm.tracked_from_s = zs.get("tracked_from_s")
         pm.tracked_to_s = zs.get("tracked_to_s")
@@ -195,7 +202,7 @@ def render_section(pms: Sequence[PositionalMatch], heading: str) -> List[str]:
     L.append("A rotation is a stretch over 3 m/s covering at least 200 m and ending at "
              "least 150 m from where it started. Vehicle versus foot is a speed "
              "threshold (90th percentile over 11 m/s), not a sighting of a vehicle. "
-             "Zone-edge time is time inside the safe circle spent in its outer quarter.")
+             "Zone-edge time is time inside the safe circle spent in its outer quarter, shown with the time inside it is computed over; under 30 s inside, the share is not reported.")
     L.append("")
     L.append("| match | landed | looted there | rotations | distance moved | vehicle time | on foot | zone-edge time | outside the blue |")
     L.append("|---|---|---|---|---|---|---|---|---|")
@@ -206,7 +213,9 @@ def render_section(pms: Sequence[PositionalMatch], heading: str) -> List[str]:
             if not pm.landing["sure"]:
                 landed += " (no descent seen)"
         edge = ("not in log" if pm.edge_fraction is None
-                else f"{float(pm.edge_fraction) * 100:.0f}%")
+                else (f"{float(pm.edge_fraction) * 100:.0f}% of {pm.edge_inside_s:.0f} s inside"
+                      if pm.edge_inside_s >= EDGE_MIN_INSIDE_S
+                      else f"only {pm.edge_inside_s:.0f} s inside the circle"))
         outside = ("not in log" if pm.time_outside_blue_s is None
                    else f"{float(pm.time_outside_blue_s):.0f} s")
         L.append(f"| M{pm.number} | {landed} | {pm.loot_s:.0f} s | {len(pm.rotations)} | "
@@ -323,7 +332,11 @@ def focus_candidates(pms: Sequence[PositionalMatch]) -> List[Tuple[float, Tuple[
             f"{tot:.0f}s outside the circle across {len(outside)} matches; worst "
             f"M{worst[1].number} with {worst[0]:.0f}s",
             f"under {max(10, tot / len(outside) * 0.5):.0f}s per match")))
-    edges = [(float(pm.edge_fraction), pm) for pm in pms if pm.edge_fraction is not None]
+    # a share of time inside the circle is only worth ranking when the team
+    # was inside it long enough for the share to mean something: one sampled
+    # interval on the rim is 100% and says nothing a coach can act on
+    edges = [(float(pm.edge_fraction), pm) for pm in pms
+             if pm.edge_fraction is not None and pm.edge_inside_s >= EDGE_MIN_INSIDE_S]
     if edges:
         med = statistics.median(v for v, _ in edges)
         if med > 0.35:

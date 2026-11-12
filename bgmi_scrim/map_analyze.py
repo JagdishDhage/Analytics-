@@ -13,7 +13,7 @@ import numpy as np
 from . import sampler
 from .map_dots import ColourBook, Dot, assign_teams_by_colour, detect_dots, read_dot_labels
 from .map_movement import (DEFAULTS, Phase, Sample, Segment, ZoneSample,
-                           edge_fraction, landing, phases, rotation_start_after_announce,
+                           edge_time, landing, phases, rotation_start_after_announce,
                            segments, split_at, squad_spread, time_outside, zone_entry)
 from .map_profile import MapProfile
 from .map_track import Detection, Track, Tracker
@@ -428,10 +428,11 @@ def _unit_events(who: Dict[str, Any], samples: Sequence[Sample], world: WorldMap
             rec["margin_s"] = round(margin, 1)
         out.append(rec)
     outside = time_outside(samples, ph_list, blue)
-    ef = edge_fraction(samples, ph_list, float(cfg.get("edge_band", 0.25)))
+    ef, ef_inside = edge_time(samples, ph_list, float(cfg.get("edge_band", 0.25)))
     out.append({"type": "zone_summary", "t": round(samples[-1].t, 2), **who,
                 "time_outside_blue_s": round(outside, 1),
                 "edge_time_fraction": round(ef, 3) if ef is not None else None,
+                "edge_time_inside_s": round(ef_inside, 1),
                 "tracked_from_s": round(samples[0].t, 2),
                 "tracked_to_s": round(samples[-1].t, 2),
                 "confidence": round(conf, 3)})

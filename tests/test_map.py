@@ -338,3 +338,38 @@ def test_the_separator_decides_between_a_tag_and_a_longer_one():
     # a tag with nothing like it in the roster is unaffected
     plain = MapProfile.from_dict({"roster": {"TX": ["ALFA"], "GB": ["BRAVO"]}})
     assert match_label("TXXALFA", plain)[:2] == ("TX", "ALFA")
+
+
+def test_edge_time_reports_its_denominator():
+    """A team inside the circle for one interval scores 1.0; the caller needs
+    the denominator to know that means nothing."""
+    from bgmi_scrim.map_movement import edge_time
+    ph = Phase(number=1, announced_t=0.0, cx=0.0, cy=0.0, r=100.0, closed_t=None)
+    # far outside for 10 intervals, then one interval on the rim
+    far = [Sample(t=float(i), x=5000.0, y=5000.0) for i in range(10)]
+    rim = [Sample(t=10.0, x=95.0, y=0.0), Sample(t=11.0, x=95.0, y=0.0)]
+    frac, inside = edge_time(far + rim, [ph], 0.25)
+    assert frac == 1.0
+    assert inside == 1.0, inside
+
+
+def test_a_thin_edge_share_is_not_reported_as_a_percentage():
+    from bgmi_scrim.positional import EDGE_MIN_INSIDE_S, PositionalMatch, focus_candidates, render_section
+    pm = PositionalMatch(number=1, team="TX", source="m1.jsonl")
+    pm.edge_fraction = 1.0
+    pm.edge_inside_s = 4.5
+    md = "\n".join(render_section([pm], "Positioning"))
+    assert "100%" not in md
+    assert "only 5 s inside the circle" in md or "only 4 s inside the circle" in md
+    pm.edge_inside_s = EDGE_MIN_INSIDE_S + 10
+    md = "\n".join(render_section([pm], "Positioning"))
+    assert "100% of 40 s inside" in md
+
+
+def test_a_thin_edge_share_is_not_a_practice_focus():
+    from bgmi_scrim.positional import PositionalMatch, focus_candidates
+    pm = PositionalMatch(number=1, team="TX", source="m1.jsonl")
+    pm.edge_fraction = 1.0
+    pm.edge_inside_s = 4.5
+    titles = [c[1][0] for c in focus_candidates([pm])]
+    assert not any("inside the circle" in t for t in titles), titles

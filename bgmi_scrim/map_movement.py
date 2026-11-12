@@ -294,11 +294,18 @@ def time_outside(samples: Sequence[Sample], ph_list: Sequence[Phase],
     return total
 
 
-def edge_fraction(samples: Sequence[Sample], ph_list: Sequence[Phase],
-                  band: float = 0.25) -> Optional[float]:
-    """Share of time spent in the outer ring of the safe circle."""
+def edge_time(samples: Sequence[Sample], ph_list: Sequence[Phase],
+              band: float = 0.25) -> Tuple[Optional[float], float]:
+    """Share of time spent in the outer ring of the safe circle, and the time
+    inside the circle that share is computed over.
+
+    The denominator matters: a team that is inside the circle for one sampled
+    interval, in its outer ring, scores 1.0 here. Reported alone that reads as
+    "100% of its time on the edge", which is true and tells a coach nothing.
+    Callers decide what denominator is enough.
+    """
     if not ph_list or len(samples) < 2:
-        return None
+        return None, 0.0
     inside = 0.0
     edge = 0.0
     for a, b in zip(samples, samples[1:]):
@@ -311,7 +318,12 @@ def edge_fraction(samples: Sequence[Sample], ph_list: Sequence[Phase],
             inside += dt
             if d >= ph.r * (1.0 - band):
                 edge += dt
-    return (edge / inside) if inside > 0 else None
+    return ((edge / inside) if inside > 0 else None), inside
+
+
+def edge_fraction(samples: Sequence[Sample], ph_list: Sequence[Phase],
+                  band: float = 0.25) -> Optional[float]:
+    return edge_time(samples, ph_list, band)[0]
 
 
 def _phase_at(ph_list: Sequence[Phase], t: float) -> Optional[Phase]:
