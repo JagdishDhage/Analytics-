@@ -1,6 +1,6 @@
 # Real-capture conditions
 
-Measured at commit `ecc29b8`. Every earlier number in this repository came
+Measured at commit `dc82478`. Every earlier number in this repository came
 from footage rendered exactly as the profile expected it. A real VOD is
 compressed, often rescaled, and often letterboxed, so these runs take the same
 clips and the same labels through an encoder first. They are still synthetic
@@ -23,7 +23,7 @@ the bars; without it a profile reads the wrong pixels and reports nothing.
 | capture | events | precision | recall | dup | phantom | miss | teams-alive | players-alive |
 |---|---|---|---|---|---|---|---|---|
 | clean 1080p (reference) | 1070 | 1.0000 | 1.0000 | 0 | 0 | 0 | 0.9995 | 0.9936 |
-| heavy compression, crf 34 | 223 | 0.9440 | 0.9821 | 3 | 10 | 4 | 0.9667 | 0.9400 |
+| heavy compression, crf 34 | 223 | 0.9955 | 0.9910 | 0 | 1 | 2 | 0.9667 | 0.9400 |
 | rescaled to 1600x900 | 223 | 1.0000 | 1.0000 | 0 | 0 | 0 | 0.9900 | 0.9967 |
 | rescaled to 1280x720 | 223 | 0.9955 | 1.0000 | 0 | 1 | 0 | 0.9900 | 0.9767 |
 | letterboxed into 1920x1080 | 223 | 1.0000 | 0.9955 | 0 | 0 | 1 | 1.0000 | 0.9967 |
@@ -60,7 +60,19 @@ could not actually identify, and nothing downstream questioned it.
    rejected good fits and lost two of eight phases. They scale with the
    capture now, and the point floor follows the smallest circle a band allows,
    which is what keeps the final 66 m circle.
-5. **A circle that grew was believed because it repeated.** A fit jumped to
+5. **A feed line named an event about a different player.** On the compressed
+   capture, three events the panel could not name took the name of whichever
+   feed line was nearest in time: a knock on slot 4 became NOVA#2, a kill on
+   slot 4 became XSP#2, a knock on slot 3 became MARC#4. The panel knows which
+   pip went down even when it cannot read the tag, and that slot number was
+   being thrown away. A feed line may now name an anonymous panel event only
+   when it is about the same slot.
+6. **A garbled tag claimed a team on a 0.6 similarity.** One row read badly
+   enough to match TX weakly, took the tag, and filed ten of another team's
+   events under it. The panel's tag match now needs 0.72, and a row that
+   cannot clear it stays unnamed, where its events are named from the feed by
+   slot or dropped. Compression precision went from 0.9440 to 0.9955.
+7. **A circle that grew was believed because it repeated.** A fit jumped to
    2822 m between the real 115 m and 66 m circles and invented a ninth phase.
    The zone only shrinks inside a match; both the stabiliser and the phase
    detector enforce that now.
