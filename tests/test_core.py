@@ -117,6 +117,15 @@ def test_panel_event_takes_killer_from_the_feed():
     assert out[0].killer_team == "GB" and out[0].source == "panel+feed"
 
 
+def test_an_event_the_panel_cannot_name_and_the_feed_cannot_either_is_dropped():
+    """It carries no identity, so no report can use it, and where the feed
+    could read that moment it has already emitted the named version."""
+    fz = Fuser(fuse_window_s=6.0, unnamed=lambda t: t is None or str(t).startswith("ROW"))
+    fz.add_panel(PanelEvent(10.0, 300, "kill", "ROW7", 2, 0.9))
+    assert fz.flush(now=None) == []
+    assert fz.unnamed_dropped == 1
+
+
 def test_the_feed_names_an_event_the_panel_could_not():
     """A panel row whose tag never resolved still sees the knock happen; the
     feed is then the only place the victim's name exists."""
@@ -396,9 +405,9 @@ def test_panel_row_geometry_does_not_drift_when_a_profile_is_scaled():
 
 
 def test_the_last_unnamed_row_takes_the_last_unclaimed_tag():
-    """One row left and one tag left is arithmetic, not a guess."""
+    """Sound only when every other row is right, so it is off by default."""
     from bgmi_scrim.analyze import PanelTagResolver
-    r = PanelTagResolver(3, ["TX", "GB", "SOUL"])
+    r = PanelTagResolver(3, ["TX", "GB", "SOUL"], allow_elimination=True)
     r.vote(0, "TX", 0.9); r.vote(0, "TX", 0.9)
     r.vote(1, "GB", 0.9); r.vote(1, "GB", 0.9)
     r.vote(2, "SOUL", 0.03)                       # too weak to claim on its own
@@ -407,9 +416,18 @@ def test_the_last_unnamed_row_takes_the_last_unclaimed_tag():
     assert r.unresolved == []
 
 
-def test_elimination_does_not_overrule_a_row_that_read_something_else():
+def test_elimination_is_off_unless_asked_for():
     from bgmi_scrim.analyze import PanelTagResolver
     r = PanelTagResolver(3, ["TX", "GB", "SOUL"])
+    r.vote(0, "TX", 0.9); r.vote(0, "TX", 0.9)
+    r.vote(1, "GB", 0.9); r.vote(1, "GB", 0.9)
+    r.resolve()
+    assert r.tag(2) == "ROW3" and r.by_elimination is None
+
+
+def test_elimination_does_not_overrule_a_row_that_read_something_else():
+    from bgmi_scrim.analyze import PanelTagResolver
+    r = PanelTagResolver(3, ["TX", "GB", "SOUL"], allow_elimination=True)
     r.vote(0, "TX", 0.9); r.vote(0, "TX", 0.9)
     r.vote(1, "GB", 0.9); r.vote(1, "GB", 0.9)
     r.vote(2, "TX", 0.4)                          # it read TX, which is taken

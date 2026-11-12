@@ -39,6 +39,7 @@ class Fuser:
     #: only one there is.
     unnamed: Callable[[Optional[str]], bool] = lambda t: False
     named_by_feed: int = 0
+    unnamed_dropped: int = 0
     _panel: List[PanelEvent] = field(default_factory=list)
     _feed: List[FeedEvent] = field(default_factory=list)
     suppressed_feed: List[FeedEvent] = field(default_factory=list)
@@ -85,6 +86,14 @@ class Fuser:
             conf = pe.confidence
             source = "panel"
             victim_team, victim_slot = pe.victim_team, pe.victim_slot
+            if fe is None and self.unnamed(pe.victim_team):
+                # The panel saw it, the feed could not name it, and an event
+                # with no identity is of no use to any report. Where the feed
+                # could read that moment it has already emitted the named
+                # version, so keeping this one only duplicates it.
+                self.unnamed_dropped += 1
+                self._panel.remove(pe)
+                continue
             if fe is not None:
                 self._feed.remove(fe)
                 killer_team, killer_slot = fe.killer_team, fe.killer_slot

@@ -30,11 +30,17 @@ class PanelTagResolver:
     """
 
     def __init__(self, rows: int, roster: Optional[List[str]] = None,
-                 min_share: float = 0.6, min_weight: float = 0.8):
+                 min_share: float = 0.6, min_weight: float = 0.8,
+                 allow_elimination: bool = False):
         self.rows = rows
         self.roster = list(roster or [])
         self.min_share = min_share
         self.min_weight = min_weight
+        # Off by default. Filling the last row with the last tag is only sound
+        # when every other row is right, and on a compressed capture one row
+        # takes a tag it should not: the leftover is then the wrong name, and
+        # it was measured putting seven of another team's events on TX.
+        self.allow_elimination = allow_elimination
         self.unresolved: List[int] = []
         self.votes: Dict[int, Dict[str, float]] = {}
         self.assigned: Dict[int, str] = {}
@@ -78,7 +84,8 @@ class PanelTagResolver:
             used_tags.add(tag)
         self.assigned = out
         self.unresolved = [r for r in range(self.rows) if r not in out]
-        self._fill_last_by_elimination()
+        if self.allow_elimination:
+            self._fill_last_by_elimination()
         self.epoch_votes = {}
         return out
 
@@ -147,6 +154,8 @@ class RunStats:
     events: int = 0
     unknown_events: int = 0
     suppressed_feed: int = 0
+    unnamed_events_dropped: int = 0
+    events_named_by_feed: int = 0
     tag_rows_resolved: int = 0
     panel_reorders: int = 0
     attributed_kills: int = 0
@@ -237,9 +246,11 @@ class Analyzer:
         panel = prof.rois.get("team_panel")
         rows = int(panel.meta.get("rows", 25)) if panel else 0
         slots = int(panel.meta.get("slots", 4)) if panel else 0
-        tags = PanelTagResolver(rows, prof.team_tags,
-                                min_share=float(prof.confirm_samples.get("tag_min_share", 0.5)),
-                                min_weight=float(prof.confirm_samples.get("tag_min_weight", 0.8)))
+        tags = PanelTagResolver(
+            rows, prof.team_tags,
+            min_share=float(prof.confirm_samples.get("tag_min_share", 0.6)),
+            min_weight=float(prof.confirm_samples.get("tag_min_weight", 0.8)),
+            allow_elimination=bool(prof.confirm_samples.get("tag_by_elimination", False)))
         if panel:
             self._resolve_tags(path, info, prof, tags,
                                int(prof.sampling.get("tag_prepass_frames", 6)))
@@ -434,6 +445,8 @@ class Analyzer:
                                   match_index, info.duration, prof)
 
         self.stats.suppressed_feed = len(fuser.suppressed_feed)
+        self.stats.unnamed_events_dropped = fuser.unnamed_dropped
+        self.stats.events_named_by_feed = fuser.named_by_feed
         self.stats.panel_reorders = tags.reorders
         self.stats.attributed_kills = fuser.attributed
         self.stats.seconds = time.time() - t0
