@@ -99,6 +99,10 @@ turned into a guess.
 ### Calibration
 
 ```bash
+# 0. let it propose the boxes from the footage, then check them
+python -m bgmi_scrim calibrate vod.mp4 --auto \
+    --base profiles/bgmi_template_1080p.json --out profiles/myorg_1080p.json --team TX
+
 # 1. scale a template to this footage's resolution
 python -m bgmi_scrim calibrate vod.mp4 --template profiles/bgmi_template_1080p.json \
     --out profiles/myorg_1080p.json --team TX
@@ -111,6 +115,16 @@ python -m bgmi_scrim calibrate vod.mp4 --out profiles/myorg_1080p.json \
 python -m bgmi_scrim calibrate vod.mp4 --preview profiles/myorg_1080p.json \
     --preview-png check.png --at 120
 ```
+
+`--auto` reads a handful of frames spread through the file and proposes what it
+can measure: where the picture sits inside the frame (letterboxed and pillarboxed
+captures silently shift every box), the team list from its regular stack of
+coloured pips, the two lobby counters — told apart by what they read, not by
+where they sit — the map name, and the kill feed. It writes the profile with
+`"_calibrated": false` and names the fields it could not propose, which are
+usually the ones that only appear at certain moments: the zone phase and state,
+the elimination card and the winner banner. A field nobody calibrated is left
+out of the profile rather than left pointing at the corner of the screen.
 
 Step 3 is the one that matters: it renders the panel's per-slot and per-tag boxes
 too, and prints the readings with their confidences plus a `low_confidence_rois`
@@ -150,6 +164,16 @@ strict (no grace) accuracy alongside.
 
 ### Measured accuracy
 
+Both `analyze` and `mapanalyze` take `--content-box auto|x,y,w,h`: a real capture
+is often letterboxed, pillarboxed or rescaled, which moves the HUD without
+changing the frame size, and a profile that only scales by resolution then reads
+the wrong pixels. `auto` finds the picture inside the bars from the brightest of
+several frames.
+
+**Putting this on your own footage**: [`docs/validating_real_footage.md`](docs/validating_real_footage.md)
+is the step-by-step, including how much to label for the numbers to mean
+anything and what each failure usually is.
+
 Pooled over five measured runs (1,070 labelled knock/kill events, 2,040 labelled
 frames): knock and kill precision **1.0000**, recall **1.0000**, 0 duplicates,
 0 phantoms, 0 misses; teams-alive 0.9995; zone phase and state 1.0000; per-team
@@ -169,6 +193,11 @@ python -m bgmi_scrim mapcalibrate map.mp4 --template profiles/mapstream_template
     --out profiles/myorg_map.json --map ERANGEL
 python -m bgmi_scrim mapcalibrate map.mp4 --preview profiles/myorg_map.json \
     --preview-png check.png --at 120
+
+# or let it propose the map box and dot size, then check
+python -m bgmi_scrim mapcalibrate map.mp4 --auto \
+    --base profiles/mapstream_template_1080p.json --out profiles/myorg_map.json \
+    --map ERANGEL
 
 # extract positions and behaviour
 python -m bgmi_scrim mapanalyze map.mp4 --profile profiles/myorg_map.json \
@@ -318,6 +347,8 @@ for measuring on real scrim VODs.
 bgmi_scrim/
   profile.py        calibration profiles (data: ROI boxes, HSV bands, thresholds)
   sampler.py        2 fps baseline + 5 fps change bursts, sequential decode
+  framing.py        where the picture sits inside a letterboxed or rescaled frame
+  autocal.py        proposes a profile from the footage, with its evidence
   preprocess.py     crop / upscale / CLAHE / adaptive + Otsu, blank-ROI gate
   ocr.py            numerals and text with calibrated confidence
   hud.py            per-field detectors (counters, panel, feed, zone, banners)

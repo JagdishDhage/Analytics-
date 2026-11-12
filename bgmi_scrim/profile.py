@@ -168,5 +168,27 @@ class Profile:
         """False for a template profile whose boxes have not been set yet."""
         return bool(self.extras.get("_calibrated", True))
 
+    def translated(self, dx: int, dy: int) -> "Profile":
+        """Shift every ROI, for a profile being placed inside a content box."""
+        out = Profile.from_dict(self.to_dict())
+        out.rois = {k: Roi(r.name, (r.box[0] + dx, r.box[1] + dy, r.box[2], r.box[3]),
+                           r.kind, dict(r.meta)) for k, r in self.rois.items()}
+        return out
+
+    def fitted(self, frame_w: int, frame_h: int,
+               content_box: Optional[Tuple[int, int, int, int]] = None) -> "Profile":
+        """Scale to the picture, then place it where the picture is.
+
+        Without a content box this is plain resolution scaling. With one, the
+        profile is scaled to the content and shifted into it, which is what
+        makes a letterboxed or pillarboxed capture readable.
+        """
+        if content_box is None:
+            return self.for_frame_size(frame_w, frame_h)
+        cx, cy, cw, ch = [int(v) for v in content_box]
+        out = self.for_frame_size(cw, ch).translated(cx, cy)
+        out.resolution = (frame_w, frame_h)
+        return out
+
     def confirm_n(self, field_name: str) -> int:
         return int(self.confirm_samples.get(field_name, self.confirm_samples.get("default", 3)))

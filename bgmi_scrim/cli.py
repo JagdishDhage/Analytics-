@@ -26,11 +26,14 @@ from typing import List, Optional
 
 def cmd_analyze(args: argparse.Namespace) -> int:
     from .analyze import analyze_video
+    from .framing import parse_box
     from .profile import Profile
     prof = Profile.load(args.profile)
+    box = parse_box(args.content_box) if args.content_box else None
     events, stats = analyze_video(args.video, prof, out_path=args.out,
                                   our_team=args.team, workers=args.workers,
-                                  verbose=not args.quiet)
+                                  verbose=not args.quiet, content_box=box,
+                                  auto_content=bool(args.content_box))
     if not args.quiet:
         print(json.dumps(stats.as_dict(), indent=2))
         print(f"wrote {args.out} ({len(events)} events)")
@@ -44,6 +47,10 @@ def cmd_calibrate(args: argparse.Namespace) -> int:
     if args.preview:
         out = cal.preview(args.video, args.preview, args.preview_png, at=args.at)
         print(json.dumps(out, indent=2, default=str))
+        return 0
+    if args.auto:
+        cal.auto(args.video, args.out, base=args.base, n_frames=args.frames,
+                 our_team=args.team)
         return 0
     if args.template:
         cal.template(args.video, args.out, args.template, our_team=args.team)
@@ -102,12 +109,16 @@ def cmd_report(args: argparse.Namespace) -> int:
 
 
 def cmd_mapanalyze(args: argparse.Namespace) -> int:
+    from .framing import parse_box
     from .map_analyze import analyze_map_video
     from .map_profile import MapProfile
     prof = MapProfile.load(args.profile)
+    box = parse_box(args.content_box) if args.content_box else None
     recs, evs, stats = analyze_map_video(args.video, prof, tracks_out=args.tracks,
                                          events_out=args.map_events, our_team=args.team,
-                                         workers=args.workers, verbose=not args.quiet)
+                                         workers=args.workers, verbose=not args.quiet,
+                                         content_box=box,
+                                         auto_content=bool(args.content_box))
     if not args.quiet:
         print(json.dumps(stats.as_dict(), indent=2))
         print(f"wrote {args.tracks} ({len(recs)} records) and {args.map_events} "
@@ -154,6 +165,10 @@ def cmd_mapcalibrate(args: argparse.Namespace) -> int:
         return 0
     if args.pois:
         mc.pick_pois(args.video, args.profile, args.pois, at=args.at)
+        return 0
+    if args.auto:
+        mc.auto(args.video, args.out, base=args.base, n_frames=args.frames,
+                map_name=args.map)
         return 0
     if args.template:
         mc.template(args.video, args.out, args.template, map_name=args.map)
@@ -202,6 +217,9 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--team", default=None, help="our team tag (defaults to the profile's)")
     a.add_argument("--workers", type=int, default=4)
     a.add_argument("--stats", default=None, help="write run stats JSON here")
+    a.add_argument("--content-box", default=None, metavar="auto|x,y,w,h",
+                   help="where the picture sits in the frame, for letterboxed or "
+                        "rescaled captures; 'auto' detects it")
     a.add_argument("--quiet", action="store_true")
     a.set_defaults(func=cmd_analyze)
 
@@ -212,6 +230,10 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--template", default=None, help="scale this profile to the video instead")
     c.add_argument("--preview", default=None, help="draw this profile's boxes on a frame")
     c.add_argument("--preview-png", default="profile_preview.png")
+    c.add_argument("--auto", action="store_true",
+                   help="propose the boxes from the footage, then check with --preview")
+    c.add_argument("--frames", type=int, default=6,
+                   help="how many frames to read when proposing")
     c.add_argument("--at", type=float, default=60.0, help="frame time to use, seconds")
     c.add_argument("--team", default=None)
     c.set_defaults(func=cmd_calibrate)
@@ -250,6 +272,8 @@ def build_parser() -> argparse.ArgumentParser:
     ma.add_argument("--team", default=None)
     ma.add_argument("--workers", type=int, default=4)
     ma.add_argument("--stats", default=None)
+    ma.add_argument("--content-box", default=None, metavar="auto|x,y,w,h",
+                   help="where the map picture sits in the frame; 'auto' detects it")
     ma.add_argument("--quiet", action="store_true")
     ma.set_defaults(func=cmd_mapanalyze)
 
@@ -291,6 +315,9 @@ def build_parser() -> argparse.ArgumentParser:
     mc.add_argument("--profile", default=None, help="profile to use with --pois")
     mc.add_argument("--pois", default=None, help="write/extend this POI table by clicking")
     mc.add_argument("--map", default=None, help="map name (sets the world size)")
+    mc.add_argument("--auto", action="store_true",
+                    help="propose the map box and dot size from the footage")
+    mc.add_argument("--frames", type=int, default=6)
     mc.add_argument("--at", type=float, default=90.0)
     mc.set_defaults(func=cmd_mapcalibrate)
 

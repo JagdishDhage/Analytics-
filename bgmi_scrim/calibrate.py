@@ -86,6 +86,67 @@ def interactive(video: str, out: str, base: Optional[str] = None, at: float = 60
     return prof
 
 
+def auto(video: str, out: str, base: Optional[str] = None, n_frames: int = 6,
+         our_team: Optional[str] = None,
+         content_box: Optional[Tuple[int, int, int, int]] = None) -> Dict[str, Any]:
+    """Propose a profile from the footage, then say what still needs checking."""
+    from .autocal import propose_hud
+    from .framing import detect_content_box, sample_frames
+    info = sampler.probe(video)
+    frames = sample_frames(video, n_frames)
+    if not frames:
+        raise IOError(f"no frames could be read from {video}")
+    box = content_box
+    if box is None:
+        cb = detect_content_box(frames)
+        box = None if cb.is_full_frame else cb.box
+    prof = (Profile.load(base) if base else Profile(name=Path(out).stem))
+    prof.name = Path(out).stem
+    prof.resolution = (info.width, info.height)
+    if our_team:
+        prof.our_team = our_team
+    proposal = propose_hud(frames, prof.map_names)
+    from .profile import Roi
+    for name, spec in proposal.fields.items():
+        meta = dict(prof.rois[name].meta) if name in prof.rois else {}
+        meta.update({k: v for k, v in spec.items() if k not in ("box", "kind")})
+        prof.rois[name] = Roi(name, tuple(int(round(v)) for v in spec["box"]),
+                              spec.get("kind", "numeral"), meta)
+    wanted = ("teams_alive", "players_alive", "team_panel", "kill_feed",
+              "zone_phase", "zone_state", "placement", "winner_banner", "map_name")
+    missing = [k for k in wanted if k not in proposal.fields]
+    # A field nobody calibrated is absent, not read from a placeholder box at the
+    # corner of the screen: drop the template's stand-ins so the pipeline skips
+    # those fields instead of reporting whatever happens to be at (0,0).
+    for name in list(prof.rois):
+        if name in proposal.fields:
+            continue
+        box = prof.rois[name].box
+        if box[0] == 0 and box[1] == 0:
+            del prof.rois[name]
+    prof.extras["_calibrated"] = False
+    prof.extras["_auto"] = {
+        "proposed": sorted(proposal.fields),
+        "not_proposed": missing,
+        "content_box": list(box) if box else None,
+        "notes": proposal.notes,
+        "checked": False,
+    }
+    prof.save(out)
+    print(f"wrote {out} from {len(frames)} frames of {Path(video).name}")
+    for note in proposal.notes:
+        print(f"  - {note}")
+    if box:
+        print(f"  - picture sits at {box} inside {info.width}x{info.height}")
+    if missing:
+        print(f"  still to set by hand: {', '.join(missing)}")
+    print("  check it before trusting it:")
+    print(f"    python -m bgmi_scrim calibrate {Path(video).name} --preview {out} "
+          f"--preview-png check.png")
+    return {"profile": out, "proposed": sorted(proposal.fields), "missing": missing,
+            "content_box": list(box) if box else None, "notes": proposal.notes}
+
+
 def template(video: str, out: str, base: str, our_team: Optional[str] = None) -> Profile:
     info = sampler.probe(video)
     prof = Profile.load(base).for_frame_size(info.width, info.height)

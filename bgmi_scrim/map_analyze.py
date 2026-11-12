@@ -52,8 +52,12 @@ def _world_for(prof: MapProfile) -> WorldMap:
 
 class MapAnalyzer:
     def __init__(self, prof: MapProfile, our_team: Optional[str] = None,
-                 workers: int = 4, verbose: bool = False):
+                 workers: int = 4, verbose: bool = False,
+                 content_box: Optional[Tuple[int, int, int, int]] = None,
+                 auto_content: bool = False):
         self.prof = prof
+        self.content_box = content_box
+        self.auto_content = auto_content
         self.our_team = our_team
         self.workers = workers
         self.verbose = verbose
@@ -63,7 +67,15 @@ class MapAnalyzer:
     def run(self, path: str) -> Tuple[List[Dict[str, Any]], MapRunStats]:
         t0 = time.time()
         info = sampler.probe(path)
-        prof = self.prof.for_frame_size(info.width, info.height)
+        box = self.content_box
+        if box is None and self.auto_content:
+            from .framing import detect_content_box, sample_frames
+            cb = detect_content_box(sample_frames(path))
+            if not cb.is_full_frame and cb.confidence >= 0.5:
+                box = cb.box
+                if self.verbose:
+                    print(f"[mapanalyze] content box: {cb.describe()}")
+        prof = self.prof.fitted(info.width, info.height, box)
         world = _world_for(prof)
         if not prof.calibrated:
             print(f"[mapanalyze] WARNING: profile '{prof.name}' is a template "
@@ -477,9 +489,12 @@ def derive_events(records: Sequence[Dict[str, Any]], prof: MapProfile,
 
 def analyze_map_video(video: str, profile: MapProfile, tracks_out: Optional[str] = None,
                       events_out: Optional[str] = None, our_team: Optional[str] = None,
-                      workers: int = 4, verbose: bool = False
+                      workers: int = 4, verbose: bool = False,
+                      content_box: Optional[Tuple[int, int, int, int]] = None,
+                      auto_content: bool = False
                       ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], MapRunStats]:
-    an = MapAnalyzer(profile, our_team=our_team, workers=workers, verbose=verbose)
+    an = MapAnalyzer(profile, our_team=our_team, workers=workers, verbose=verbose,
+                     content_box=content_box, auto_content=auto_content)
     records, stats = an.run(video)
     events = derive_events(records, profile)
     if tracks_out:

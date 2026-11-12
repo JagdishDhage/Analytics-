@@ -154,6 +154,18 @@ class MapProfile:
     def label_re(self) -> "re.Pattern[str]":
         return re.compile(self.label_pattern, re.IGNORECASE)
 
+    def fitted(self, frame_w: int, frame_h: int,
+               content_box: Optional[Tuple[int, int, int, int]] = None) -> "MapProfile":
+        """Scale to the picture, then place it where the picture is."""
+        if content_box is None:
+            return self.for_frame_size(frame_w, frame_h)
+        cx, cy, cw, ch = [int(v) for v in content_box]
+        out = self.for_frame_size(cw, ch)
+        x, y, w, h = out.map_area
+        out.map_area = (x + cx, y + cy, w, h)
+        out.resolution = (frame_w, frame_h)
+        return out
+
     def for_frame_size(self, width: int, height: int) -> "MapProfile":
         rw, rh = self.resolution
         if (rw, rh) == (width, height):

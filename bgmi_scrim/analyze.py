@@ -124,8 +124,12 @@ def _slot_key(row: int, slot: int) -> str:
 
 class Analyzer:
     def __init__(self, prof: Profile, our_team: Optional[str] = None,
-                 workers: int = 4, verbose: bool = False):
+                 workers: int = 4, verbose: bool = False,
+                 content_box: Optional[Tuple[int, int, int, int]] = None,
+                 auto_content: bool = False):
         self.prof = prof
+        self.content_box = content_box
+        self.auto_content = auto_content
         self.our_team = our_team or prof.our_team
         self.workers = max(1, workers)
         self.verbose = verbose
@@ -164,7 +168,15 @@ class Analyzer:
     def run(self, path: str) -> Tuple[List[Event], RunStats]:
         t0 = time.time()
         info = sampler.probe(path)
-        prof = self.prof.for_frame_size(info.width, info.height)
+        box = self.content_box
+        if box is None and self.auto_content:
+            from .framing import detect_content_box, sample_frames
+            cb = detect_content_box(sample_frames(path))
+            if not cb.is_full_frame and cb.confidence >= 0.5:
+                box = cb.box
+                if self.verbose:
+                    print(f"[analyze] content box: {cb.describe()}")
+        prof = self.prof.fitted(info.width, info.height, box)
         if self.verbose:
             print(f"[analyze] {info.width}x{info.height} {info.fps:.2f}fps "
                   f"{info.frame_count} frames ({info.duration:.1f}s), profile '{prof.name}'")
@@ -465,8 +477,11 @@ class Analyzer:
 
 def analyze_video(video: str, profile: Profile, out_path: Optional[str] = None,
                   our_team: Optional[str] = None, workers: int = 4,
-                  verbose: bool = False) -> Tuple[List[Event], RunStats]:
-    an = Analyzer(profile, our_team=our_team, workers=workers, verbose=verbose)
+                  verbose: bool = False,
+                  content_box: Optional[Tuple[int, int, int, int]] = None,
+                  auto_content: bool = False) -> Tuple[List[Event], RunStats]:
+    an = Analyzer(profile, our_team=our_team, workers=workers, verbose=verbose,
+                  content_box=content_box, auto_content=auto_content)
     events, stats = an.run(video)
     if out_path:
         from .events import JsonlWriter

@@ -32,6 +32,52 @@ def _gui() -> bool:
         return False
 
 
+def auto(video: str, out: str, base: Optional[str] = None, n_frames: int = 6,
+         map_name: Optional[str] = None,
+         content_box: Optional[Tuple[int, int, int, int]] = None) -> Dict[str, Any]:
+    """Propose a map profile from the footage: where the map is, how big a dot is."""
+    from .autocal import propose_map_area
+    from .framing import detect_content_box, sample_frames
+    info = sampler.probe(video)
+    frames = sample_frames(video, n_frames)
+    if not frames:
+        raise IOError(f"no frames could be read from {video}")
+    box = content_box
+    if box is None:
+        cb = detect_content_box(frames)
+        box = None if cb.is_full_frame else cb.box
+    prof = MapProfile.load(base) if base else MapProfile()
+    prof.name = Path(out).stem
+    prof.resolution = (info.width, info.height)
+    if map_name:
+        from .map_profile import WORLD_SIZE_M
+        prof.map_name = map_name.upper()
+        prof.world_size_m = WORLD_SIZE_M.get(prof.map_name, prof.world_size_m)
+    proposal = propose_map_area(frames)
+    if "map_area" in proposal.fields:
+        prof.map_area = tuple(int(v) for v in proposal.fields["map_area"])
+    if "dots" in proposal.fields:
+        prof.dots.update(proposal.fields["dots"])
+    prof.extras["_calibrated"] = False
+    prof.extras["_auto"] = {"content_box": list(box) if box else None,
+                            "notes": proposal.notes, "checked": False}
+    prof.save(out)
+    print(f"wrote {out} from {len(frames)} frames of {Path(video).name}")
+    for note in proposal.notes:
+        print(f"  - {note}")
+    if not prof.map_name:
+        print("  still to set by hand: the map name, which fixes the world size "
+              "(--map ERANGEL)")
+    if not prof.roster:
+        print("  still to set by hand: the roster, team tag -> player names; "
+              "labels are matched against it")
+    print("  check it before trusting it:")
+    print(f"    python -m bgmi_scrim mapcalibrate {Path(video).name} --preview {out} "
+          f"--preview-png check.png")
+    return {"profile": out, "map_area": list(prof.map_area),
+            "content_box": list(box) if box else None, "notes": proposal.notes}
+
+
 def template(video: str, out: str, base: str, map_name: Optional[str] = None) -> MapProfile:
     info = sampler.probe(video)
     prof = MapProfile.load(base).for_frame_size(info.width, info.height)
