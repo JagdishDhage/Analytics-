@@ -184,10 +184,16 @@ def read_circles(frame: np.ndarray, prof: MapProfile, world: WorldMap
     mpp = world.metres_per_pixel()
     for name, band in prof.circles.items():
         pts, (ox, oy) = _band_points(frame, prof, band)
-        if len(pts) < band.min_points:
+        # The last circle of a match is a few pixels across and honestly holds
+        # only a few dozen points. A flat minimum throws it away and loses the
+        # final phase, so the floor follows the smallest circle this band is
+        # allowed to find.
+        r_min_px = band.min_radius_frac * w
+        need = max(30, min(band.min_points, int(1.2 * 2 * math.pi * r_min_px)))
+        if len(pts) < need:
             out[name] = None
             continue
-        fit = fit_circle_ransac(pts, band.min_radius_frac * w, band.max_radius_frac * w,
+        fit = fit_circle_ransac(pts, r_min_px, band.max_radius_frac * w,
                                 tol_px=band.tol_px)
         if fit is None:
             out[name] = None

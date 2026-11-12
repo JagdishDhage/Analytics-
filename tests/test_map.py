@@ -273,3 +273,22 @@ def test_a_rotation_through_two_circles_is_split_at_the_announcements():
     assert all(p.mode == "vehicle" for p in parts)
     # a movement inside one phase is left alone
     assert len(split_at(seg, s, [200.0], DEFAULTS)) == 1
+
+
+def test_a_tiny_final_circle_is_still_fitted():
+    """The last circle of a match is a few pixels across and honestly holds only
+    a few dozen points; a flat minimum threw it away and lost the final phase."""
+    from bgmi_scrim.map_profile import MapProfile
+    from bgmi_scrim.map_world import WorldMap
+    from bgmi_scrim.map_zones import read_circles
+    prof = MapProfile.from_dict({
+        "map_area": [0, 0, 650, 650], "map": {"name": "ERANGEL", "world_size_m": 8000},
+        "circles": {"safe": {"hsv_lo": [0, 0, 215], "hsv_hi": [179, 45, 255],
+                             "min_radius_frac": 0.01, "max_radius_frac": 0.9,
+                             "min_points": 150, "tol_px": 2.7}}})
+    frame = np.full((650, 650, 3), 30, np.uint8)
+    cv2.circle(frame, (300, 320), 8, (240, 240, 240), 2, cv2.LINE_AA)   # ~50 points
+    world = WorldMap((0, 0, 650, 650), 8000.0, "ERANGEL")
+    c = read_circles(frame, prof, world)["safe"]
+    assert c is not None, "the final circle was rejected for holding few points"
+    assert abs(c.r - 8 * world.metres_per_pixel()) < 40
