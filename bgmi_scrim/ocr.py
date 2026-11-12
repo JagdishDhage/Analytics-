@@ -278,16 +278,27 @@ def _read_numeral_one(binary: np.ndarray, max_digits: int = 3) -> Tuple[Optional
 
 def read_text(img, whitelist: str = ALNUM, psm: int = 7,
               accept_conf: float = 0.85) -> Tuple[str, float]:
-    """Read a text ROI from one or more binarisations, keeping the best read."""
+    """Read a text ROI from one or more binarisations, keeping the best read.
+
+    The longest read wins, with confidence breaking ties. Ranking by
+    confidence first looks more principled and measured worse: while the char
+    whitelist was flattening every confidence to 0 this rule was effectively
+    "longest wins", and that is what the panel-tag accuracy was tuned on. With
+    real confidences arriving, ranking by them changed which binarisation won
+    for a tag ROI and took team_alive_count from 1.0000 to 0.9600 on gate run
+    A -- nothing confidently wrong, but 300 frames of confident-correct counts
+    turned into low-confidence ones. The confidence is still returned, which
+    is what the kill feed needed from it.
+    """
     best: Tuple[str, float] = ("", 0.0)
     for b in _as_images(img):
         txt, conf = _tess(b, psm, whitelist)
         txt = txt.upper().strip()
         if not txt:
             continue
-        if (conf, len(txt)) > (best[1], len(best[0])):
+        if (len(txt), conf) > (len(best[0]), best[1]):
             best = (txt, conf)
-        if conf >= accept_conf:
+        if conf >= accept_conf and len(txt) >= len(best[0]):
             break
     return best
 
