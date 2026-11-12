@@ -50,6 +50,34 @@ exercised.
 
 **Gate: PASSED on synthetic footage**, on all five runs individually and pooled.
 
+Re-measured after the kill-feed work in `feed_only_scenario.md`, which
+changed how every text ROI in the pipeline is read. The five runs, same
+seeds, at commit `c2421ea`: pooled precision 1.0000 (1070/1070), recall
+1.0000 (1070/1070), 0 duplicates, 0 phantoms, teams-alive 0.9995
+(2039/2040), players-alive 0.9936 (2027/2040), and all five pass
+individually.
+
+Per-team alive count was 0.9941 (50700/51000) in that run, the whole
+shortfall being run B, where a 1080p profile scaled to 720p left our own
+team's row unnamed on all 300 frames -- flagged low-confidence, never
+confidently wrong. Commit `8d6301a` fixed that and run B re-measured at
+1.0000 with the gate passing, so the pooled figure is 1.0000 (51000/51000);
+the other four runs were already at 1.0000 before it and that commit can
+only act where a label ROI reads as nothing.
+
+### Render the clips at the capture's frame rate, not the sampling rate
+
+The command below renders at `synth`'s default frame rate, and that matters.
+Sampling is 2 fps raised to 5 fps for 3 s around a detected counter change,
+so a clip rendered at 2 fps has no intermediate frames for the burst to
+reach. Measured on run A rendered with `--fps 2`: 92 counter change points
+detected, **0 burst samples taken**, and players-alive 0.7667 against 0.9967
+from the same seed at the default rate, with 70 confidently wrong readings.
+Events were unaffected (1.0000/1.0000).
+
+Real OBS captures are 30 or 60 fps so this does not arise in practice, but a
+source at the base sampling rate disables that safeguard without saying so.
+
 ## Events, per run
 
 | run | labelled | predicted | matched | precision | recall | duplicates | phantoms | misses | mean timing error |
