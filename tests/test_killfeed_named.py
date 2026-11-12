@@ -89,3 +89,18 @@ def test_two_slotted_victims_stay_two_events():
                               ("SOULXVIPER FINISHED GODLXNOVO", 0.9)])
     kills = sorted(e.victim_slot for e in out if e.kind == "kill")
     assert kills == [1, 3], kills
+
+
+def test_an_unreadable_text_roi_falls_back_to_the_constrained_engine():
+    """Our own team's panel row is drawn highlighted. Read with the free
+    engine its glyphs fall outside the alphabet, the filter leaves an empty
+    string, and the row goes unnamed -- which cost TX its alive count on
+    every frame. An empty read retries with the engine constrained."""
+    import numpy as np
+    import cv2
+    from bgmi_scrim.ocr import read_text
+    img = np.full((40, 80), 255, np.uint8)
+    cv2.putText(img, "TX", (6, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, 0, 2, cv2.LINE_AA)
+    txt, _ = read_text(img)
+    assert txt, "a legible ROI must not read as nothing"
+    assert txt.startswith("T")

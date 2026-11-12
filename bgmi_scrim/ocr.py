@@ -291,7 +291,8 @@ def read_text(img, whitelist: str = ALNUM, psm: int = 7,
     is what the kill feed needed from it.
     """
     best: Tuple[str, float] = ("", 0.0)
-    for b in _as_images(img):
+    imgs = _as_images(img)
+    for b in imgs:
         txt, conf = _tess(b, psm, whitelist)
         txt = txt.upper().strip()
         if not txt:
@@ -300,6 +301,20 @@ def read_text(img, whitelist: str = ALNUM, psm: int = 7,
             best = (txt, conf)
         if conf >= accept_conf and len(txt) >= len(best[0]):
             break
+    if best[0]:
+        return best
+    # Nothing readable. On a short, highlighted ROI -- our own team's row in
+    # the panel is drawn differently from the rest -- the free engine offers
+    # glyphs outside the alphabet and the filter above leaves an empty
+    # string, so TX's row went unnamed and its alive count with it. Constrain
+    # the engine and ask once more. The confidence it reports under the
+    # whitelist is flat, which costs nothing here: the caller scores a tag by
+    # how well it matches the roster, and an empty read scores nothing at all.
+    for b in imgs:
+        txt, _ = _tess(b, psm, whitelist, engine_whitelist=True)
+        txt = txt.upper().strip()
+        if txt and len(txt) > len(best[0]):
+            best = (txt, 0.0)
     return best
 
 
