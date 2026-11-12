@@ -312,3 +312,23 @@ def test_the_stabiliser_rejects_a_fit_that_grew():
     assert st.accept("safe", Circle(5795, 2836, 2822, 0.9)) is None
     assert st.accept("safe", Circle(5795, 2836, 2822, 0.9)) is None   # even twice
     assert st.accept("safe", Circle(3869, 4938, 66, 0.9)) is not None
+
+
+def test_a_short_tag_does_not_absorb_a_longer_one():
+    """OR took 1564 samples that belonged to other teams once 720p garbled the
+    labels: a two-letter tag fits inside half the roster."""
+    prof = MapProfile.from_dict({"roster": {"OR": ["ALFA"], "ORCA": ["ALFA"],
+                                            "TX": ["BRAVO"]}})
+    # a clean label still resolves
+    assert match_label("ORCAXALFA", prof)[:2] == ("ORCA", "ALFA")
+    assert match_label("ORXALFA", prof)[:2] == ("OR", "ALFA")
+    # a garbled one that fits both says nothing rather than picking the short tag
+    team, player, _score = match_label("0RCAXALFA", prof)
+    assert team in (None, "ORCA")
+    assert match_team("ORCAXALFA", prof)[0] == "ORCA"
+
+
+def test_a_label_that_fits_two_teams_equally_is_not_named():
+    prof = MapProfile.from_dict({"roster": {"GB": ["ALFA"], "GD": ["ALFA"]}})
+    team, player, _ = match_label("GXXALFA", prof)
+    assert team is None

@@ -200,14 +200,19 @@ def match_label(text: str, prof: MapProfile,
         return None, None, 0.0
     cands = list(candidates if candidates is not None else candidate_labels(prof))
     if cands:
-        best, bteam, bplayer = 0.0, None, None
-        for norm, team, player in cands:
-            score = difflib.SequenceMatcher(None, t, norm).ratio()
-            if score > best:
-                best, bteam, bplayer = score, team, player
-        if best >= float(prof.label.get("min_score", 0.6)):
-            return bteam, bplayer, best
-        return None, None, best
+        scored = sorted(((difflib.SequenceMatcher(None, t, norm).ratio(), team, player)
+                         for norm, team, player in cands), reverse=True)
+        best, bteam, bplayer = scored[0]
+        if best < float(prof.label.get("min_score", 0.6)):
+            return None, None, best
+        # A short tag like OR sits inside half the roster once the text is
+        # garbled. If a second entry scores almost as well, the label does not
+        # say which, so it says nothing.
+        margin = float(prof.label.get("min_margin", 0.06))
+        runner = next((sc for sc, tm, pl in scored[1:] if tm != bteam), 0.0)
+        if best - runner < margin:
+            return None, None, best * 0.5
+        return bteam, bplayer, best
     m = prof.label_re().search(text.upper())
     if m:
         return m.group("team"), m.group("player"), 0.55
@@ -236,7 +241,7 @@ def match_team(text: str, prof: MapProfile) -> Tuple[Optional[str], float]:
     t = _norm(text)
     if len(t) < 3:
         return None, 0.0
-    best, score = None, 0.0
+    scores: List[Tuple[float, str]] = []
     for team in prof.teams:
         tag = _norm(team)
         if not tag:
@@ -250,10 +255,14 @@ def match_team(text: str, prof: MapProfile) -> Tuple[Optional[str], float]:
             s = min(0.9, 0.6 + 0.04 * len(tag))
         else:
             s = difflib.SequenceMatcher(None, t[:len(tag) + 2], tag).ratio() * 0.75
-        if s > score:
-            best, score = team, s
-    if best is None:
+        scores.append((s, team))
+    if not scores:
         return None, 0.0
+    scores.sort(reverse=True)
+    score, best = scores[0]
+    runner = scores[1][0] if len(scores) > 1 else 0.0
+    if score - runner < float(prof.label.get("min_margin", 0.06)):
+        return None, score * 0.5          # two tags fit this text equally well
     # a player name from that team in the same text is a second witness
     if any(_norm(p) in t for p in prof.players_of(best)):
         score = min(1.0, score + 0.12)
