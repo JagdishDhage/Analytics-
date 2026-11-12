@@ -177,6 +177,29 @@ class FeedTracker:
         # a second key, and the same feed entry would be emitted twice.
         return (ev.kind, ev.victim_team, ev.victim_slot)
 
+    def _fold(self, ev: FeedEvent, pool) -> Optional[tuple]:
+        """Find the key in `pool` that is this same event.
+
+        A feed line whose player name the roster cannot place carries no slot,
+        which is honest but weaker: "GODL killed" and "GODL#1 killed" are then
+        two keys for one kill, and the second one is a duplicate. So when
+        either side has no slot, the kind and the victim's team identify the
+        event on their own.
+
+        The cost is that two players of one team going down in the same
+        window, with one of the two reads unslotted, fold into one event. That
+        shows up as a miss rather than as a duplicate or a phantom, which is
+        the right way round: the slotted read is kept and nothing is invented.
+        """
+        k = self.key(ev)
+        if k in pool:
+            return k
+        for kk in pool:
+            if kk[0] == ev.kind and kk[1] == ev.victim_team and (
+                    ev.victim_slot is None or kk[2] is None):
+                return kk
+        return None
+
     def observe(self, t: float, lines: List[Tuple[str, float]]) -> List[FeedEvent]:
         out: List[FeedEvent] = []
         seen_now = set()
@@ -185,10 +208,15 @@ class FeedTracker:
             if ev is None:
                 continue
             k = self.key(ev)
-            seen_now.add(k)
-            last = self._emitted.get(k)
+            ek = self._fold(ev, self._emitted)
+            last = self._emitted.get(ek) if ek is not None else None
             if last is not None and (t - last) < self.prof.dedup_window_s:
+                seen_now.add(ek)
                 continue
+            pk = self._fold(ev, self._pending)
+            if pk is not None:
+                k = pk
+            seen_now.add(k)
             cur = self._pending.get(k)
             if cur is None:
                 ev.t = t
@@ -202,6 +230,14 @@ class FeedTracker:
                     cur.killer_team, cur.killer_slot = ev.killer_team, ev.killer_slot
                     cur.raw = ev.raw
                 cur.confidence = max(cur.confidence, ev.confidence)
+                if cur.victim_slot is None and ev.victim_slot is not None:
+                    # the better-resolved read wins the slot, and the pending
+                    # entry moves to its key so the emitted record carries it
+                    cur.victim_slot = ev.victim_slot
+                    del self._pending[k]
+                    k = self.key(cur)
+                    self._pending[k] = cur
+                    seen_now.add(k)
             if cur.sightings >= self.confirm_sightings:
                 cur.confidence = min(1.0, cur.confidence + 0.05 * (cur.sightings - 1))
                 self._emitted[k] = cur.t

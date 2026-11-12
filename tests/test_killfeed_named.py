@@ -63,3 +63,29 @@ def test_killer_and_victim_both_keep_their_own_tag():
 def test_spaceless_fallback_still_resolves():
     e = parse_feed_line("ORCAXBRAVOFINISHEDBLINDXBRAVO", 0.85, SHORT_VS_LONG)
     assert (e.killer_team, e.victim_team) == ("ORCA", "BLIND")
+
+
+def test_an_unslotted_read_is_not_a_second_kill():
+    """One kill read twice -- once with the slot, once without -- is one
+    event, not two. This is the duplicate the gate forbids."""
+    from bgmi_scrim.killfeed import FeedTracker
+    tr = FeedTracker(prof=PROF, confirm_sightings=2)
+    out = []
+    # the roster cannot place "SUBSTITUTE", so this read carries no slot
+    out += tr.observe(0.0, [("SOULXVIPER FINISHED GODLXSUBSTITUTE", 0.8)])
+    out += tr.observe(0.5, [("SOULXVIPER FINISHED GODLXSUBSTITUTE", 0.8)])
+    out += tr.observe(1.0, [("SOULXVIPER FINISHED GODLXJONATHAN", 0.9)])
+    out += tr.observe(1.5, [("SOULXVIPER FINISHED GODLXJONATHAN", 0.9)])
+    kills = [e for e in out if e.kind == "kill" and e.victim_team == "GODL"]
+    assert len(kills) == 1, [(e.victim_slot, e.t) for e in kills]
+
+
+def test_two_slotted_victims_stay_two_events():
+    from bgmi_scrim.killfeed import FeedTracker
+    tr = FeedTracker(prof=PROF, confirm_sightings=2)
+    out = []
+    for t in (0.0, 0.5):
+        out += tr.observe(t, [("SOULXVIPER FINISHED GODLXJONATHAN", 0.9),
+                              ("SOULXVIPER FINISHED GODLXNOVO", 0.9)])
+    kills = sorted(e.victim_slot for e in out if e.kind == "kill")
+    assert kills == [1, 3], kills
