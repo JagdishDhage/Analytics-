@@ -14,6 +14,9 @@ mapsynth   --out clip.mp4 --labels l.jsonl                   (test footage)
 mapreport  --tracks t1.jsonl ... --map-events me1.jsonl ... --team TX   (phase 3)
 
 dashboard  --events e1.jsonl ... [--tracks t1.jsonl ...] --team TX --out dash.html
+
+ingest     <map video> --corpus DIR --match-id ID --profile mp.json   (corpus)
+scout      --corpus DIR [--team SOUL GODL] --out scouting.md
 """
 from __future__ import annotations
 
@@ -192,6 +195,63 @@ def cmd_mapreport(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ingest(args: argparse.Namespace) -> int:
+    """One match in: extract if needed, derive the facts, append to the corpus."""
+    from .corpus import load_corpus, match_facts, write_match
+    tracks, events = args.tracks, args.map_events
+    if args.video:
+        from .framing import parse_box
+        from .map_analyze import analyze_map_video
+        from .map_profile import MapProfile
+        if not args.profile:
+            print("ingest: --profile is required with a video", file=sys.stderr)
+            return 2
+        work = Path(args.corpus) / "extracted"
+        work.mkdir(parents=True, exist_ok=True)
+        tracks = tracks or str(work / f"{args.match_id}.tracks.jsonl")
+        events = events or str(work / f"{args.match_id}.mapevents.jsonl")
+        prof = MapProfile.load(args.profile)
+        box = parse_box(args.content_box) if args.content_box else None
+        analyze_map_video(args.video, prof, tracks_out=tracks, events_out=events,
+                          our_team=None, workers=args.workers,
+                          verbose=not args.quiet, content_box=box,
+                          auto_content=bool(args.content_box))
+    if not tracks or not events:
+        print("ingest: pass a video, or --tracks and --map-events", file=sys.stderr)
+        return 2
+    facts = match_facts(args.match_id, tracks, events, played_at=args.played_at)
+    path = write_match(args.corpus, facts, overwrite=args.overwrite)
+    n = len(load_corpus(args.corpus))
+    print(f"wrote {path}")
+    print(f"  {facts['teams_seen']} teams, {facts['zone_phases']} zone phases, "
+          f"{facts['contacts_total']} contacts, {facts['stream_length_s']}s of stream")
+    print(f"  corpus now holds {n} match{'' if n == 1 else 'es'}")
+    if facts["contacts_total"] == 0:
+        print("  note: no contacts derived. Either the teams never came within "
+              "120 m, or team identity was not read well enough to pair them up.")
+    return 0
+
+
+def cmd_scout(args: argparse.Namespace) -> int:
+    from .corpus import load_corpus, team_profiles
+    from .scout import scout_markdown
+    matches = load_corpus(args.corpus)
+    if not matches:
+        print(f"no matches in {args.corpus}; run ingest first", file=sys.stderr)
+        return 2
+    profiles = team_profiles(matches)
+    if args.json:
+        Path(args.json).write_text(json.dumps(profiles, indent=1, sort_keys=True) + "\n")
+        print(f"wrote {args.json}")
+    md = scout_markdown(matches, profiles, teams=args.team)
+    if args.out:
+        Path(args.out).write_text(md + "\n")
+        print(f"wrote {args.out} ({len(matches)} matches, {len(profiles)} teams)")
+    elif not args.json:
+        print(md)
+    return 0
+
+
 def cmd_dashboard(args: argparse.Namespace) -> int:
     from .dashboard import build_model, write_dashboard
     table = json.loads(Path(args.points_table).read_text()) if args.points_table else None
@@ -336,6 +396,29 @@ def build_parser() -> argparse.ArgumentParser:
     db.add_argument("--artifact", action="store_true",
                     help="emit the body-only variant for publishing as an artifact")
     db.set_defaults(func=cmd_dashboard)
+
+    ing = sub.add_parser("ingest", help="add one match to the scouting corpus")
+    ing.add_argument("video", nargs="?", default=None,
+                     help="map stream; omit to ingest tracks/events already extracted")
+    ing.add_argument("--corpus", required=True, help="corpus directory")
+    ing.add_argument("--match-id", required=True, help="unique id, e.g. 2026-04-12-m3")
+    ing.add_argument("--profile", default=None, help="map profile (required with a video)")
+    ing.add_argument("--tracks", default=None)
+    ing.add_argument("--map-events", default=None)
+    ing.add_argument("--played-at", default=None, help="free-form date, kept as metadata")
+    ing.add_argument("--content-box", default=None)
+    ing.add_argument("--workers", type=int, default=4)
+    ing.add_argument("--overwrite", action="store_true")
+    ing.add_argument("--quiet", action="store_true")
+    ing.set_defaults(func=cmd_ingest)
+
+    sc = sub.add_parser("scout", help="per-team profiles across the whole corpus")
+    sc.add_argument("--corpus", required=True)
+    sc.add_argument("--team", nargs="*", default=None,
+                    help="limit the report to these teams; default is every team")
+    sc.add_argument("--out", default=None)
+    sc.add_argument("--json", default=None, help="also write the profiles as JSON")
+    sc.set_defaults(func=cmd_scout)
 
     mr = sub.add_parser("mapreport", help="phase 3: map report (drops, rotations, zones)")
     mr.add_argument("--tracks", nargs="+", required=True)
